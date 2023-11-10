@@ -7,12 +7,12 @@ import os
 import json
 import numpy as np
 import torch
-from system_utils import searchForMaxIteration
+from utils.system_utils import searchForMaxIteration
 from gaussian_renderer import render, GaussianModel 
-from graphics_utils import focal2fov 
+from utils.graphics_utils import focal2fov 
 from scene.cameras import Camera as GSCamera
 from PIL import Image
-import cv2 
+from moviepy.editor import ImageSequenceClip
 
 class PipelineParamsNoparse:
     """ Same as PipelineParams but without argument parser. """
@@ -65,7 +65,7 @@ def load_camera(model_path, idx=0):
 
     tmp = np.zeros((4,4))
     tmp[:3,:3] = raw_camera['rotation']
-    tmp[:3, 3] = raw_camera['translation']
+    tmp[:3, 3] = raw_camera['position']
     tmp[3,3] = 1
 
     C2W = np.linalg.inv(tmp)
@@ -92,61 +92,101 @@ def new_camera(previous_camera, R, T):
     :return 
         new_camera: GSCamera object
     """
-    C2W = np.zeros((4,4))
-    C2W[:3,:3] = R
-    C2W[:3, 3] = T
-    C2W[3,3] = 1
 
-    C2W = np.linalg.inv(C2W)
+    R = np.dot(R, previous_camera.R)
+    T = previous_camera.T + T
 
-    R = previous_camera.R*C2W[:3,:3].transpose()
-    T = previous_camera.T*C2W[:3, 3]
-
-    width = previous_camera.width
-    height = previous_camera.height
+    width = previous_camera.image_width
+    height = previous_camera.image_height
     fovx = previous_camera.FoVx
     fovy = previous_camera.FoVy
 
     return GSCamera(colmap_id=previous_camera.colmap_id, R=R, T=T, FoVx=fovx, FoVy=fovy, image=torch.zeros((3, height, width)), gt_alpha_mask=None, image_name ='fake', uid=0)
 
-def circular_motion_Z(num_views):
+def calculate_tilt_rotation(tilt_angle):
     """
-    Create a circular motion about Z axis Rotation and Translation vectors around a fixed center point. 
+    Calculate rotation matrix for a tilt angle.
+    
+    :param
+        tilt_angle: angle to tilt camera
+    
+    :return
+        R: rotation matrix
+    """
+    R_tilt = np.array([
+        [np.cos(tilt_angle), 0, np.sin(tilt_angle)],
+        [0, 1, 0],
+        [-np.sin(tilt_angle), 0, np.cos(tilt_angle)]
+    ])
+    return R_tilt
+
+def create_spiral_poses(num_views, tilt_angle, radius=0.5, height=0.5, n_loops=2):
+    """
+    Create poses along a spiral path with a given number of views and a tilt angle.
 
     :param
         num_views: number of views to create
-    
-    :return
-        R, T: rotation and translation vectors
-    """
-    R = []
-    T = []
-    for i in range(num_views):
-        theta = 2*np.pi*i/num_views
-        R = np.array([[np.cos(theta), -np.sin(theta), 0], [np.sin(theta), np.cos(theta), 0], [0, 0, 1]])
-        T = np.array([0, 0, 0])
-        R.append(R)
-        T.append(T)
-    return R, T
+        tilt_angle: angle to tilt camera (radians)
+        radius: radius of the base circle of the spiral
+        height: height of the spiral from start to end
+        n_loops: number of loops in the spiral
 
-def circular_cameras(center_camera, num_views):
+    :return
+        R_list, T_list: Lists of rotation and translation matrices for each pose
+    """
+    R_list = []
+    T_list = []
+
+    # Tilt rotation is constant for all poses
+    R_tilt = calculate_tilt_rotation(tilt_angle)
+
+    for i in range(num_views):
+        # Calculate the progress along the spiral path
+        t = n_loops * (2 * np.pi) * (i / num_views)
+        z_height = (height * i) / num_views
+
+        # Rotation around Z-axis
+        R_z = np.array([
+            [np.cos(t), -np.sin(t), 0],
+            [np.sin(t), np.cos(t), 0],
+            [0, 0, 1]
+        ])
+
+        # Combine the Z-axis rotation with the tilt rotation
+        R_combined = np.dot(R_z, R_tilt)
+
+        # Calculate the translation vector
+        T = np.array([
+            radius * np.cos(t),
+            radius * np.sin(t),
+            z_height  # This creates the upward spiral effect
+        ])
+
+        # Add the combined rotation and translation to the lists
+        R_list.append(R_combined)
+        T_list.append(T)
+
+    return R_list, T_list
+
+def circular_conical_cameras(center_camera, num_views, tilt_angle):
     """
     Create a circular motion about Z axis Rotation and Translation vectors around a fixed center point. 
 
     :param
         center_camera: GSCamera object
         num_views: number of views to create
+        tilt_angle: angle to tilt camera (radians)
     
     :return
         cameras: list of GSCamera objects
     """
     cameras = []
-    R, T = circular_motion_Z(num_views)
+    R, T = create_spiral_poses(num_views, tilt_angle)
     for i in range(num_views):
         cameras.append(new_camera(center_camera, R[i], T[i]))
     return cameras
 
-def render_circular_path_video(model_path, center_camera_idx, num_views, output_path, fps, iteration=-1, sh_degree=3):
+def render_circular_conical_path_video(model_path, center_camera_idx, num_views, tilt_angle, output_path, fps, iteration=-1, sh_degree=3):
     """
     render a circular path video of the Gaussian model around the center_camera location provided. 
 
@@ -154,6 +194,7 @@ def render_circular_path_video(model_path, center_camera_idx, num_views, output_
         model_path: path to model
         center_camera_idx: index to camera to use as center of circular path 
         num_views: number of views to create
+        tilt_angle: angle to tilt camera (radians)
         output_path: path to save the video
         fps: frames per second of the video
         iteration: iteration of checkpoint to load (-1 for max)
@@ -165,7 +206,7 @@ def render_circular_path_video(model_path, center_camera_idx, num_views, output_
     # Load model and cameras 
     gaussians = load_checkpoint(model_path, sh_degree, iteration)
     center_camera = load_camera(model_path, center_camera_idx)
-    cameras = circular_cameras(center_camera, num_views)
+    cameras = circular_conical_cameras(center_camera, num_views, tilt_angle)
     background = torch.tensor([0, 0, 0], dtype=torch.float32, device="cuda")
     pipeline = PipelineParamsNoparse()
 
@@ -174,20 +215,13 @@ def render_circular_path_video(model_path, center_camera_idx, num_views, output_
     for camera in cameras:
         render_res = render(camera, gaussians, pipeline, background)
         rendering = render_res["render"]
-        image = Image.fromarray((rendering.permute(1, 2, 0) * 255).to(torch.uint8), 'RGB')
+        image = (rendering.permute(1, 2, 0) * 255).to(torch.uint8).detach().cpu().numpy()
         images.append(image)
 
     # Save video from frames in images
-    
-    # Define the codec and create VideoWriter object
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_path, fourcc, fps, (images[0].shape[1], images[0].shape[0]))
-
     try:
-        for image in images:
-                frame = cv2.imread(image)
-                out.write(frame)
-        out.release()
+        clip = ImageSequenceClip(list(images), fps=fps)
+        clip.write_videofile(output_path, codec='libx264', audio=False)
         print(f'Video saved to {output_path}')
 
     except Exception as e:
