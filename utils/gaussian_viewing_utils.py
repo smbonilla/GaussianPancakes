@@ -143,24 +143,19 @@ def create_spiral_poses(num_views, tilt_angle, radius=0.5, height=0.5, n_loops=2
     for i in range(num_views):
         # Calculate the progress along the spiral path
         t = n_loops * (2 * np.pi) * (i / num_views)
-        z_height = (height * i) / num_views
 
         # Rotation around Z-axis
         R_z = np.array([
-            [np.cos(t), -np.sin(t), 0],
+            [0, 0, 0],
             [np.sin(t), np.cos(t), 0],
             [0, 0, 1]
         ])
 
         # Combine the Z-axis rotation with the tilt rotation
-        R_combined = np.dot(R_z, R_tilt)
+        R_combined = R_z # np.dot(R_z)
 
         # Calculate the translation vector
-        T = np.array([
-            radius * np.cos(t),
-            radius * np.sin(t),
-            z_height  # This creates the upward spiral effect
-        ])
+        T = np.array([0, 0, 0])
 
         # Add the combined rotation and translation to the lists
         R_list.append(R_combined)
@@ -229,3 +224,37 @@ def render_circular_conical_path_video(model_path, center_camera_idx, num_views,
         print(e)
         return
     
+def render_mask_gaussians(model_path, percent_of_gaussians, camera_index):
+    """
+    Render an image of the scene from camera index specified with specific percent of gaussians visisble.
+
+    :param
+        gaussians: GaussianModel object
+        percent_of_gaussians: percent of gaussians to render
+        camera_index: index of camera to render from
+    
+    :return
+        image: image of scene
+    """
+    gaussians = load_checkpoint(model_path)
+    pipeline = PipelineParamsNoparse()
+    background = torch.tensor([0, 0, 0], dtype=torch.float32, device="cuda")
+    
+    scaling = gaussians._scaling.max(dim=1)[0]
+    scaling_max = scaling.max().item()
+    scaling_min = scaling.min().item()
+
+    mask = scaling < (percent_of_gaussians * (scaling_max - scaling_min) + scaling_min)
+    tmp_gaussians = GaussianModel(gaussians.max_sh_degree)
+    tmp_gaussians._xyz = gaussians._xyz[mask, :]
+    tmp_gaussians._features_dc = gaussians._features_dc[mask, ...]
+    tmp_gaussians._features_rest = gaussians._features_rest[mask, ...]
+    tmp_gaussians._opacity = gaussians._opacity[mask, ...]
+    tmp_gaussians._scaling = gaussians._scaling[mask, ...]
+    tmp_gaussians._rotation = gaussians._rotation[mask, ...]
+    tmp_gaussians.active_sh_degree = gaussians.max_sh_degree
+
+    cam = load_camera(model_path, camera_index)
+    render_res = render(cam, tmp_gaussians, pipeline, background)
+    rendering = render_res["render"]
+    return (rendering.permute(1, 2, 0) * 255).to(torch.uint8).detach().cpu().numpy()
