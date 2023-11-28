@@ -13,6 +13,7 @@ from utils.graphics_utils import focal2fov
 from scene.cameras import Camera as GSCamera
 from PIL import Image
 from moviepy.editor import ImageSequenceClip
+import matplotlib.pyplot as plt
 
 class PipelineParamsNoparse:
     """ Same as PipelineParams but without argument parser. """
@@ -145,14 +146,18 @@ def create_spiral_poses(num_views, tilt_angle, radius=0.5, height=0.5, n_loops=2
         t = n_loops * (2 * np.pi) * (i / num_views)
 
         # Rotation around Z-axis
-        R_z = np.array([
-            [0, 0, 0],
-            [np.sin(t), np.cos(t), 0],
-            [0, 0, 1]
-        ])
+        # R_z = np.array([
+        #     [np.cos(t), -np.sin(t), 0],
+        #     [np.sin(t),  np.cos(t), 0],
+        #     [0,         0,          1]
+        # ])
+        R_z = np.array([(np.cos(t) * 0.5) - 2, -np.sin(t) - 0.5, -np.sin(0.5 * t) * 0.75]) * radius
+
+        # reshape to 3x3 matrix
+        R_z = np.reshape(R_z, (3, 3))
 
         # Combine the Z-axis rotation with the tilt rotation
-        R_combined = R_z # np.dot(R_z)
+        R_combined = R_z
 
         # Calculate the translation vector
         T = np.array([0, 0, 0])
@@ -258,3 +263,172 @@ def render_mask_gaussians(model_path, percent_of_gaussians, camera_index):
     render_res = render(cam, tmp_gaussians, pipeline, background)
     rendering = render_res["render"]
     return (rendering.permute(1, 2, 0) * 255).to(torch.uint8).detach().cpu().numpy()
+
+
+def normalize(x):
+    """
+    Normalize a vector.
+    
+    :param
+        x: vector to normalize
+        
+    :return
+        normalized vector"""
+    return x / np.linalg.norm(x)
+
+
+def generate_spiral_points(n_poses, n_rotations, radius, plotting=False):
+    """
+    Generate points on a 2D spiral.
+
+    :param
+    n_poses (int): Number of points on the spiral.
+    n_rotations (int): Number of rotations in the spiral.
+    radius (float): Maximum radius of the spiral.
+
+    :return
+    np.array: Array of points on the spiral.
+    """
+
+    # The total angle for the spiral
+    theta_max = 2 * np.pi * n_rotations
+
+    # Linearly spaced values of theta
+    theta = np.linspace(0, theta_max, n_poses)
+
+    # Linearly increasing radius
+    r = np.linspace(0, radius, n_poses)
+
+    # Cartesian coordinates of the spiral
+    x = r * np.cos(theta)
+    y = r * np.sin(theta)
+
+    if plotting: 
+
+        # Plotting the spiral
+        plt.figure(figsize=(6, 6))
+        plt.plot(x, y, marker='o')
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.title('2D Spiral')
+        plt.grid(True)
+        plt.axis('equal')
+        plt.show()
+
+    return np.column_stack((x, y))
+
+
+def generate_spiral_points3D(direction, translation, n_poses=120, n_rotations=2, radius=0.5, plotting=False):
+    """
+    Generate a spiral path in 3D space. 
+
+    :param
+        direction: vector perpendicular to the camera plane
+        translation: translation vector of the camera
+        n_poses: number of poses to create along the path
+        n_rotations: number of rotations in the spiral
+        radius: maximum radius of the spiral
+    """
+
+    # define a vector perpendicular to the direction vector
+    if direction[1] != 0:
+        perpendicular = np.array([direction[2], 0, -direction[0]])
+    elif direction[2] != 0:
+        perpendicular = np.array([0, direction[0], -direction[1]])
+    else:
+        perpendicular = np.array([direction[1], -direction[0], 0])
+    
+    # normalize the perpendicular vector
+    V_norm = normalize(perpendicular) 
+
+    # find second vector perpendicular to the direction vector
+    U = np.cross(direction, V_norm)
+
+    # normalize the second perpendicular vector
+    U_norm = normalize(U)
+
+    # generate rotation matrix R = [V_norm, U_norm, direction]
+    R = np.column_stack((V_norm, U_norm, direction))
+
+    # generate points on a 2D spiral
+    points = generate_spiral_points(n_poses, n_rotations, radius)
+
+    # reshape points to 3D [x, y, 0]
+    points = np.column_stack((points, np.zeros((n_poses, 1))))
+
+    # rotate the points to transform 2D spiral to camera plane
+    rotated_points = np.dot(points, R)
+
+    # add translation to the rotated points
+    rotated_points = rotated_points + translation
+
+    if plotting:
+        # Plotting the spiral
+        fig = plt.figure(figsize=(6, 6))
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot(rotated_points[:, 0], rotated_points[:, 1], rotated_points[:, 2], marker='o')
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title('3D Spiral')
+        ax.grid(True)
+        plt.show()
+
+    return rotated_points 
+
+def render_spiral_path_video(model_path, center_camera_idx, fps, output_path, n_poses=120, n_rotations=2, radius=0.5, iteration=-1, sh_degree=3):
+    """
+    render a spiral path video of the Gaussian model around the center_camera location provided. 
+
+    :param
+        model_path: path to model
+        center_camera_idx: index to camera to use as center of circular path 
+        fps: frames per second of the video
+        output_path: path to save the video
+        n_poses: number of poses to create along the path
+        n_rotations: number of rotations in the spiral
+        radius: maximum radius of the spiral
+        iteration: iteration of checkpoint to load (-1 for max)
+        sh_degree: degree of spherical harmonics
+    
+    :return
+        None
+    """
+    # Load model and cameras 
+    gaussians = load_checkpoint(model_path, sh_degree, iteration)
+    center_camera = load_camera(model_path, center_camera_idx)
+
+    # Get the direction vector of the camera
+    direction = center_camera.R[:, 2]
+    translation = center_camera.T
+
+    # Generate spiral path in camera plane
+    points = generate_spiral_points3D(direction, translation, n_poses, n_rotations, radius)
+
+    # Create a camera for each point on the spiral path
+    cameras = []
+    R = np.eye(3)
+    for i in range(n_poses):
+        cameras.append(new_camera(center_camera, R, points[i] - translation))
+
+    background = torch.tensor([0, 0, 0], dtype=torch.float32, device="cuda")
+    pipeline = PipelineParamsNoparse()
+
+    # Render
+    images = []
+    for camera in cameras:
+        render_res = render(camera, gaussians, pipeline, background)
+        rendering = render_res["render"]
+        image = (rendering.permute(1, 2, 0) * 255).to(torch.uint8).detach().cpu().numpy()
+        images.append(image)
+
+    # Save video from frames in images
+    try:
+        clip = ImageSequenceClip(list(images), fps=fps)
+        clip.write_videofile(output_path, codec='libx264', audio=False)
+        print(f'Video saved to {output_path}')
+
+    except Exception as e:
+        print('There seems to be an issue with loading the images.')
+        print(e)
+        return

@@ -50,8 +50,9 @@ class Camera(nn.Module):
 
         self.trans = trans
         self.scale = scale
-        print(self.R)
-        print(np.linalg.det(self.R))
+        
+        if np.linalg.det(self.R) == 0:
+            print(self.R)
 
         self.world_view_transform = torch.tensor(getWorld2View2(R, T, trans, scale)).transpose(0, 1).cuda()
         self.projection_matrix = getProjectionMatrix(znear=self.znear, zfar=self.zfar, fovX=self.FoVx, fovY=self.FoVy).transpose(0,1).cuda()
