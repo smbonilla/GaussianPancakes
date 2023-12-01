@@ -8,11 +8,10 @@
 #
 # For inquiries contact  george.drettakis@inria.fr
 #
-
 import os
 import torch
 from random import randint
-from utils.loss_utils import l1_loss, ssim
+from utils.loss_utils import l1_loss, ssim, l2_loss
 from gaussian_renderer import render, network_gui
 import sys
 from scene import Scene, GaussianModel
@@ -47,7 +46,6 @@ def compute_geometric_loss(gaussian_normals, original_normals, chunk_size=1000):
     original_normals = original_normals.to(device)
 
     total_loss = 0.0
-    # for every gaussian point find closest original normal point and compute the loss
 
     for i in range(0, gaussian_normals.size(0), chunk_size):
         gauss_chunk = gaussian_normals[i:i+chunk_size]
@@ -57,8 +55,8 @@ def compute_geometric_loss(gaussian_normals, original_normals, chunk_size=1000):
         min_distance_idx = torch.argmin(distance_matrix, dim=1)
         closest_original_normals = original_normals[min_distance_idx]
 
-        # compute L1 loss
-        chunk_loss = l1_loss(gauss_chunk, closest_original_normals)
+        # compute L1 loss of the normals
+        chunk_loss = l1_loss(gauss_chunk[:,3:], closest_original_normals[:,3:])
         total_loss += torch.sum(chunk_loss)
     
     return total_loss / gaussian_normals.size(0)
@@ -75,6 +73,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+
+    original_normals = gaussians.compute_point_cloud_normals() # maybe is doing something to gaussians?
 
     iter_start = torch.cuda.Event(enable_timing = True)
     iter_end = torch.cuda.Event(enable_timing = True)
@@ -118,11 +118,21 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         render_pkg = render(viewpoint_cam, gaussians, pipe, background)
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
+        # Compute Gaussian normals
+        gaussian_normals = gaussians.get_gaussian_normals()
+
         # Loss
+        # geometric_loss = compute_geometric_loss(gaussian_normals, original_normals)
         gt_image = viewpoint_cam.original_image.cuda()
-        Ll1 = l1_loss(image, gt_image) # ADD GEOMETRIC LOSS REGULARIZATION
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+        Ll1 = l1_loss(image, gt_image) 
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) #+ geometric_loss # ADD GEOMETRIC LOSS REGULARIZATION lambda 
         loss.backward()
+
+        # DELETE ME - DEBUGGING
+        # WRITE GEOMETRIC LOSS TO txt FILE
+        # with open("geometric_loss.txt", "a") as f:
+        #     f.write(str(geometric_loss.item()) + "\n")
+        # del gaussian_normals
 
         iter_end.record()
 
@@ -223,6 +233,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
         torch.cuda.empty_cache()
 
 if __name__ == "__main__":
+    os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # DELETE ME - DEBUGGING
     # Set up command line argument parser
     parser = ArgumentParser(description="Training script parameters")
     lp = ModelParams(parser)
