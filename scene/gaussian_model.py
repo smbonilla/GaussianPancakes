@@ -20,6 +20,8 @@ from utils.sh_utils import RGB2SH
 from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation
+import time
+from tqdm import tqdm 
 
 class GaussianModel:
 
@@ -429,6 +431,9 @@ class GaussianModel:
         # normalize the normal vector... just in case
         normals_normalized = torch.nn.functional.normalize(normal_vector, dim=1) # size is (N, 3)
 
+        # concatenate the normals with the xyz coordinates
+        normals_normalized = torch.cat((self.get_xyz, normals_normalized), dim=1) # size is (N, 6)
+
         return normals_normalized
 
     def compute_point_cloud_normals(self, k=10):
@@ -438,35 +443,59 @@ class GaussianModel:
         param:
             k (int): Number of nearest neighbors to consider for each point.
         """
-        xyz = self.get_xyz()  # Assuming this returns the point cloud as a tensor
+        start = time.time()
+        print("Computing point cloud normals... This will only be done once.\n")
 
-        # break up xyz into chunks of 10000 points to avoid BREAKING THINGS dammit
-        xyz_chunks = torch.split(xyz, 10000, dim=0)
+        xyz = self.get_xyz
 
-        for 
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        xyz = xyz.to(device)
 
-        # Compute all pairwise distances (N x N)
-        distances = torch.cdist(xyz, xyz)
+        # break up xyz into chunks to avoid BREAKING THINGS dammit
+        size_of_xyz = xyz.shape[0]
+        chunk_size = int(size_of_xyz / 300)
 
-        # Find the indices of the k nearest neighbors for each point (excluding self)
-        k_neighbors_indices = torch.topk(distances, k=k+1, largest=False, sorted=False)[1][:, 1:]
+        all_normals = None
 
-        # Gather the neighbor points
-        neighbors = torch.gather(xyz.unsqueeze(1).repeat(1, xyz.shape[0], 1), 1, k_neighbors_indices.unsqueeze(-1).repeat(1, 1, xyz.shape[-1]))
+        num_chunks = (xyz.shape[0] + chunk_size - 1) // chunk_size
+        pbar = tqdm(total=num_chunks, desc="Computing normals")
 
-        # Center the neighbor points
-        neighbors_centered = neighbors - neighbors.mean(dim=2, keepdim=True)
+        for i in range(0, xyz.shape[0], chunk_size):
+            chunk = xyz[i:i+chunk_size]
 
-        # Compute the covariance matrix for each set of neighbors
-        covariance_matrices = torch.matmul(neighbors_centered.transpose(-2, -1), neighbors_centered) / (k - 1)
+            distances = torch.cdist(chunk, xyz)
 
-        # Perform eigen decomposition to get the eigenvectors
-        _, eigenvectors = torch.linalg.eigh(covariance_matrices)
+            # USE FAISS INSTEAD?
+            k_neighbors_indices = torch.topk(distances, k=k+1, largest=False, sorted=False)[1][:, 1:]
 
-        # The eigenvector corresponding to the smallest eigenvalue is the normal vector
-        normals = eigenvectors[..., 0]
+            flat_indices = k_neighbors_indices.reshape(-1)
 
-        # normalize the normal vector... just in case
-        normals_normalized = torch.nn.functional.normalize(normals, dim=-1)
+            actual_chunk_size = chunk.shape[0]
 
-        return normals_normalized
+            neighbors = torch.index_select(xyz, 0, flat_indices).reshape(actual_chunk_size, k, xyz.shape[1])
+
+            neighbors_centered = neighbors - neighbors.mean(dim=1, keepdim=True)
+
+            covariance_matrices = torch.matmul(neighbors_centered.transpose(-2, -1), neighbors_centered) / (k - 1)
+
+            _, eigenvectors = torch.linalg.eigh(covariance_matrices)
+
+            normals = eigenvectors[..., 0]
+
+            normals_normalized = torch.nn.functional.normalize(normals, dim=1)
+
+            if all_normals is None:
+                all_normals = normals_normalized
+            else:
+                all_normals = torch.cat((all_normals, normals_normalized), dim=0)
+
+            del chunk, k_neighbors_indices, neighbors, neighbors_centered, covariance_matrices, eigenvectors, normals
+
+            pbar.update(1)
+        pbar.close()
+
+        all_normals = torch.cat((xyz, all_normals), dim=1) # size is (N, 6)
+
+        end = time.time()
+        print("Finished computing normals in {} seconds.".format(end-start))
+        return all_normals

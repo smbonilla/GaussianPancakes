@@ -28,6 +28,41 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
+def compute_geometric_loss(gaussian_normals, original_normals, chunk_size=1000):
+    """    
+    Compute the geometric loss between gaussian normals and original normals.
+
+    :param 
+        gaussian_normals: Tensor of shape (N, 6) representing gaussian normals.
+        original_normals: Tensor of shape (M, 6) representing original normals.
+        chunk_size: Size of chunks to be used for processing to manage GPU memory usage.
+
+    :return: The computed L1 loss.
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # gaussian_normals: (N, 6) (x, y, z, nx, ny, nz) - N is the number of gaussian points (always > M)
+    gaussian_normals = gaussian_normals.to(device)
+    # original_normals: (M, 6) (x, y, z, nx, ny, nz) - M is the number of original points (always < N)
+    original_normals = original_normals.to(device)
+
+    total_loss = 0.0
+    # for every gaussian point find closest original normal point and compute the loss
+
+    for i in range(0, gaussian_normals.size(0), chunk_size):
+        gauss_chunk = gaussian_normals[i:i+chunk_size]
+
+        # compute pairwise distance between gaussian_chunk and original_normals x y z
+        distance_matrix = torch.cdist(gauss_chunk[:, :3], original_normals[:, :3])
+        min_distance_idx = torch.argmin(distance_matrix, dim=1)
+        closest_original_normals = original_normals[min_distance_idx]
+
+        # compute L1 loss
+        chunk_loss = l1_loss(gauss_chunk, closest_original_normals)
+        total_loss += torch.sum(chunk_loss)
+    
+    return total_loss / gaussian_normals.size(0)
+
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
@@ -85,7 +120,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
-        Ll1 = l1_loss(image, gt_image)
+        Ll1 = l1_loss(image, gt_image) # ADD GEOMETRIC LOSS REGULARIZATION
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
         loss.backward()
 
