@@ -30,6 +30,11 @@ class GaussianModel:
             symm = strip_symmetric(actual_covariance)
             return symm
         
+        def return_actual_covariance(scaling, scaling_modifier, rotation):
+            L = build_scaling_rotation(scaling_modifier * scaling, rotation)
+            actual_covariance = L @ L.transpose(1, 2)
+            return actual_covariance
+        
         self.scaling_activation = torch.exp
         self.scaling_inverse_activation = torch.log
 
@@ -39,6 +44,8 @@ class GaussianModel:
         self.inverse_opacity_activation = inverse_sigmoid
 
         self.rotation_activation = torch.nn.functional.normalize
+
+        self.actual_covariance = return_actual_covariance
 
 
     def __init__(self, sh_degree : int):
@@ -116,6 +123,9 @@ class GaussianModel:
     
     def get_covariance(self, scaling_modifier = 1):
         return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)
+    
+    def get_actual_covariance(self, scaling_modifier = 1):
+        return self.actual_covariance(self.get_scaling, scaling_modifier, self._rotation)
 
     def oneupSHdegree(self):
         if self.active_sh_degree < self.max_sh_degree:
@@ -405,3 +415,58 @@ class GaussianModel:
     def add_densification_stats(self, viewspace_point_tensor, update_filter):
         self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
         self.denom[update_filter] += 1
+
+    def get_gaussian_normals(self):
+        """
+        Compute the normal of the 3D Gaussian as the shortest vector.
+        """
+        covariance_matrix = self.get_actual_covariance() # size is (N, 3, 3)
+        eigenvalues, eigenvectors = torch.linalg.eigh(covariance_matrix) # size is (N, 3), (N, 3, 3)
+
+        # The eigenvector corresponding to the smallest eigenvalue
+        normal_vector = eigenvectors[:, :, 0] # size is (N, 3)
+
+        # normalize the normal vector... just in case
+        normals_normalized = torch.nn.functional.normalize(normal_vector, dim=1) # size is (N, 3)
+
+        return normals_normalized
+
+    def compute_point_cloud_normals(self, k=10):
+        """
+        Compute normal vectors for each point in the point cloud using PCA on the neighborhood.
+
+        param:
+            k (int): Number of nearest neighbors to consider for each point.
+        """
+        xyz = self.get_xyz()  # Assuming this returns the point cloud as a tensor
+
+        # break up xyz into chunks of 10000 points to avoid BREAKING THINGS dammit
+        xyz_chunks = torch.split(xyz, 10000, dim=0)
+
+        for 
+
+        # Compute all pairwise distances (N x N)
+        distances = torch.cdist(xyz, xyz)
+
+        # Find the indices of the k nearest neighbors for each point (excluding self)
+        k_neighbors_indices = torch.topk(distances, k=k+1, largest=False, sorted=False)[1][:, 1:]
+
+        # Gather the neighbor points
+        neighbors = torch.gather(xyz.unsqueeze(1).repeat(1, xyz.shape[0], 1), 1, k_neighbors_indices.unsqueeze(-1).repeat(1, 1, xyz.shape[-1]))
+
+        # Center the neighbor points
+        neighbors_centered = neighbors - neighbors.mean(dim=2, keepdim=True)
+
+        # Compute the covariance matrix for each set of neighbors
+        covariance_matrices = torch.matmul(neighbors_centered.transpose(-2, -1), neighbors_centered) / (k - 1)
+
+        # Perform eigen decomposition to get the eigenvectors
+        _, eigenvectors = torch.linalg.eigh(covariance_matrices)
+
+        # The eigenvector corresponding to the smallest eigenvalue is the normal vector
+        normals = eigenvectors[..., 0]
+
+        # normalize the normal vector... just in case
+        normals_normalized = torch.nn.functional.normalize(normals, dim=-1)
+
+        return normals_normalized

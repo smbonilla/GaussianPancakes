@@ -432,3 +432,109 @@ def render_spiral_path_video(model_path, center_camera_idx, fps, output_path, n_
         print('There seems to be an issue with loading the images.')
         print(e)
         return
+    
+def rotate_about_x_axis(R, degree):
+    """
+    Rotate a given rotation matrix about the x-axis by a given degree.
+
+    :param
+        R: rotation matrix
+        degree: degree to rotate by
+    
+    :return
+        rotated rotation matrix
+    """
+    rad = np.radians(degree)
+    R_x = np.array([
+        [1, 0, 0],
+        [0, np.cos(rad), -np.sin(rad)],
+        [0, np.sin(rad), np.cos(rad)]
+    ])
+    # R_x = np.array([
+    #     [np.cos(rad), -np.sin(rad), 0],
+    #     [np.sin(rad), np.cos(rad), 0],
+    #     [0, 0, 1]
+    # ])
+    # R_x = np.array([
+    #     [np.cos(rad), 0, np.sin(rad)],
+    #     [0, 1, 0],
+    #     [-np.sin(rad), 0, np.cos(rad)]
+    # ])
+    # transpose R first
+    # R = R.transpose()
+    return np.dot(R, R_x)
+
+def rotate_about_x_path(model_path, center_camera_idx, degree, num_steps=120, num_repeats=1):
+    """
+    Return a list of new cameras that rotate from -degree to +degree 
+    about the x-axis in num_steps repeated num_repeats times.
+
+    :param
+        model_path: path to model
+        center_camera_idx: index to camera to use as center of the rotating path
+        degree: degree to rotate by
+        num_steps: number of steps to rotate in
+        num_repeats: number of times to repeat the rotation
+    
+    :return
+        list of new cameras
+    """
+    center_camera = load_camera(model_path, center_camera_idx)
+
+    R_center = center_camera.R
+    T_center = center_camera.T  
+    cameras = []
+    for i in range(num_repeats):
+        for j in range(num_steps):
+            degree_step = 2 * degree / num_steps 
+            R = rotate_about_x_axis(R_center, -degree + (j * degree_step))
+            fovx = center_camera.FoVx
+            fovy = center_camera.FoVy
+            height = center_camera.image_height
+            width = center_camera.image_width
+            new_camera = GSCamera(colmap_id=center_camera.colmap_id, R=R, T=T_center, FoVx=fovx, FoVy=fovy, image=torch.zeros((3, height, width)), gt_alpha_mask=None, image_name ='fake', uid=0)
+            cameras.append(new_camera)
+    return cameras
+
+def render_rotate_about_x_path_video(model_path, center_camera_idx, degree, fps, output_path, num_steps=120, num_repeats=1):
+    """
+    render a rotation about x-axis path video of the Gaussian model around the center_camera location provided. 
+
+    :param
+        model_path: path to model
+        center_camera_idx: index to camera to use as center of circular path 
+        degree: degree to rotate by
+        fps: frames per second of the video
+        output_path: path to save the video
+        num_steps: number of steps to rotate in
+        num_repeats: number of times to repeat the rotation
+        iteration: iteration of checkpoint to load (-1 for max)
+        sh_degree: degree of spherical harmonics
+    
+    :return
+        None
+    """
+    # Load model and cameras 
+    gaussians = load_checkpoint(model_path)
+    cameras = rotate_about_x_path(model_path, center_camera_idx, degree, num_steps, num_repeats)
+    background = torch.tensor([0, 0, 0], dtype=torch.float32, device="cuda")
+    pipeline = PipelineParamsNoparse()
+
+    # Render
+    images = []
+    for camera in cameras:
+        render_res = render(camera, gaussians, pipeline, background)
+        rendering = render_res["render"]
+        image = (rendering.permute(1, 2, 0) * 255).to(torch.uint8).detach().cpu().numpy()
+        images.append(image)
+
+    # Save video from frames in images
+    try:
+        clip = ImageSequenceClip(list(images), fps=fps)
+        clip.write_videofile(output_path, codec='libx264', audio=False)
+        print(f'Video saved to {output_path}')
+
+    except Exception as e:
+        print('There seems to be an issue with loading the images.')
+        print(e)
+        return
