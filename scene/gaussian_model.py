@@ -449,9 +449,6 @@ class GaussianModel:
 
         xyz = self.get_xyz
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        xyz = xyz.to(device)
-
         # break up xyz into chunks to avoid BREAKING THINGS dammit
         size_of_xyz = xyz.shape[0]
         chunk_size = int(size_of_xyz / 300)
