@@ -38,12 +38,12 @@ def compute_geometric_loss(gaussian_normals, original_normals, chunk_size=1000):
 
     :return: The computed L1 loss.
     """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # gaussian_normals: (N, 6) (x, y, z, nx, ny, nz) - N is the number of gaussian points (always > M)
-    gaussian_normals = gaussian_normals.to(device)
+    #gaussian_normals = gaussian_normals.to(device)
     # original_normals: (M, 6) (x, y, z, nx, ny, nz) - M is the number of original points (always < N)
-    original_normals = original_normals.to(device)
+    #original_normals = original_normals.to(device)
 
     total_loss = 0.0
 
@@ -59,7 +59,7 @@ def compute_geometric_loss(gaussian_normals, original_normals, chunk_size=1000):
         chunk_loss = l1_loss(gauss_chunk[:,3:], closest_original_normals[:,3:])
         total_loss += torch.sum(chunk_loss)
     
-    return total_loss / gaussian_normals.size(0)
+    return torch.tensor(total_loss / gaussian_normals.size(0)).float().cuda()
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
     first_iter = 0
@@ -122,17 +122,16 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gaussian_normals = gaussians.get_gaussian_normals()
 
         # Loss
-        # geometric_loss = compute_geometric_loss(gaussian_normals, original_normals)
+        geometric_loss = compute_geometric_loss(gaussian_normals, original_normals)
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image) 
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) #+ geometric_loss # ADD GEOMETRIC LOSS REGULARIZATION lambda 
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + geometric_loss # ADD GEOMETRIC LOSS REGULARIZATION lambda 
         loss.backward()
 
         # DELETE ME - DEBUGGING
         # WRITE GEOMETRIC LOSS TO txt FILE
-        # with open("geometric_loss.txt", "a") as f:
-        #     f.write(str(geometric_loss.item()) + "\n")
-        # del gaussian_normals
+        with open("geometric_loss.txt", "a") as f:
+           f.write(str(geometric_loss.item()) + "\n")
 
         iter_end.record()
 

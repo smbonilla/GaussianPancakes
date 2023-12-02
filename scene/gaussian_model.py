@@ -422,8 +422,8 @@ class GaussianModel:
         """
         Compute the normal of the 3D Gaussian as the shortest vector.
         """
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        covariance_matrix = self.get_actual_covariance().to(device) # size is (N, 3, 3)
+        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        covariance_matrix = self.get_actual_covariance() # size is (N, 3, 3)
         eigenvalues, eigenvectors = torch.linalg.eigh(covariance_matrix) # size is (N, 3), (N, 3, 3)
 
         # The eigenvector corresponding to the smallest eigenvalue
