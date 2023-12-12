@@ -143,7 +143,7 @@ class GaussianModel:
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
 
-        dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
+        dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001) # find mean dist to nearest 3 neighbors
         scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 3)
         rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
         rots[:, 0] = 1
@@ -422,12 +422,9 @@ class GaussianModel:
         """
         Compute the normal of the 3D Gaussian as the shortest vector.
         """
-        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        covariance_matrix = self.get_actual_covariance() # size is (N, 3, 3)
-        eigenvalues, eigenvectors = torch.linalg.eigh(covariance_matrix) # size is (N, 3), (N, 3, 3)
+        covariance_matrix = self.get_actual_covariance() # size is (N, 3, 3) - initially [x, 0, 0; 0, x, 0; 0, 0, x]
 
-        # The eigenvector corresponding to the smallest eigenvalue
-        normal_vector = eigenvectors[:, :, 0] # size is (N, 3)
+        normal_vector = covariance_matrix[:, 0, :] # choose the first row of the covariance matrix as the normal vector
 
         # normalize the normal vector... just in case
         normals_normalized = torch.nn.functional.normalize(normal_vector, dim=1) # size is (N, 3)
@@ -480,7 +477,8 @@ class GaussianModel:
 
             normals = eigenvectors[..., 0]
 
-            normals_normalized = torch.nn.functional.normalize(normals, dim=1)
+            eps  = 1e-8
+            normals_normalized = torch.nn.functional.normalize(normals, dim=1, eps=eps) 
 
             if all_normals is None:
                 all_normals = normals_normalized
@@ -495,3 +493,16 @@ class GaussianModel:
         end = time.time()
         print("Finished computing normals in {} seconds.".format(end-start))
         return all_normals
+
+    def named_parameters(self):
+        return {
+            "xyz": self._xyz,
+            "f_dc": self._features_dc,
+            "f_rest": self._features_rest,
+            "opacity": self._opacity,
+            "scaling" : self._scaling,
+            "rotation" : self._rotation, 
+            'xyz_grad_accum': self.xyz_gradient_accum,
+            'denom': self.denom,
+            'max_radii2D': self.max_radii2D
+        }

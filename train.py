@@ -27,7 +27,7 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
-def compute_geometric_loss(gaussian_normals, original_normals, chunk_size=1000):
+def compute_geometric_loss(gaussian_normals, original_normals, weight=1, chunk_size=1000):
     """    
     Compute the geometric loss between gaussian normals and original normals.
 
@@ -38,12 +38,6 @@ def compute_geometric_loss(gaussian_normals, original_normals, chunk_size=1000):
 
     :return: The computed L1 loss.
     """
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # gaussian_normals: (N, 6) (x, y, z, nx, ny, nz) - N is the number of gaussian points (always > M)
-    #gaussian_normals = gaussian_normals.to(device)
-    # original_normals: (M, 6) (x, y, z, nx, ny, nz) - M is the number of original points (always < N)
-    #original_normals = original_normals.to(device)
 
     total_loss = 0.0
 
@@ -53,15 +47,25 @@ def compute_geometric_loss(gaussian_normals, original_normals, chunk_size=1000):
         # compute pairwise distance between gaussian_chunk and original_normals x y z
         distance_matrix = torch.cdist(gauss_chunk[:, :3], original_normals[:, :3])
         min_distance_idx = torch.argmin(distance_matrix, dim=1)
-        closest_original_normals = original_normals[min_distance_idx]
+        closest_original_matrix = original_normals[min_distance_idx]
 
-        # compute L1 loss of the normals
-        chunk_loss = l1_loss(gauss_chunk[:,3:], closest_original_normals[:,3:])
+        chunk_loss = l1_loss(gauss_chunk[:,3:], closest_original_matrix[:,3:])
+
+        if torch.isnan(chunk_loss).any() or torch.isinf(chunk_loss).any():
+            print(f"Warning: NaN or inf found in chunk_loss at chunk {i}")
+
         total_loss += torch.sum(chunk_loss)
     
-    return torch.tensor(total_loss / gaussian_normals.size(0)).float().cuda()
+    num_chunks = gaussian_normals.size(0) / chunk_size
+    total_loss = total_loss / num_chunks
+
+    total_loss = total_loss * weight
+    
+    return total_loss
+
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
+    torch.autograd.set_detect_anomaly(True) # REMOVE ME
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
@@ -74,7 +78,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-    original_normals = gaussians.compute_point_cloud_normals() # maybe is doing something to gaussians?
+    original_normals = gaussians.compute_point_cloud_normals().detach() # (M, 6) (x, y, z, nx, ny, nz)
 
     iter_start = torch.cuda.Event(enable_timing = True)
     iter_end = torch.cuda.Event(enable_timing = True)
@@ -122,16 +126,18 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gaussian_normals = gaussians.get_gaussian_normals()
 
         # Loss
-        geometric_loss = compute_geometric_loss(gaussian_normals, original_normals)
+        geometric_loss = compute_geometric_loss(gaussian_normals, original_normals, weight=1)
+
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image) 
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + geometric_loss # ADD GEOMETRIC LOSS REGULARIZATION lambda 
+
         loss.backward()
 
         # DELETE ME - DEBUGGING
         # WRITE GEOMETRIC LOSS TO txt FILE
         with open("geometric_loss.txt", "a") as f:
-           f.write(str(geometric_loss.item()) + "\n")
+          f.write(str(geometric_loss.item()) + "\n")
 
         iter_end.record()
 
@@ -232,7 +238,6 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
         torch.cuda.empty_cache()
 
 if __name__ == "__main__":
-    os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # DELETE ME - DEBUGGING
     # Set up command line argument parser
     parser = ArgumentParser(description="Training script parameters")
     lp = ModelParams(parser)
