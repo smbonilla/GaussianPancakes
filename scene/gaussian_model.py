@@ -19,7 +19,7 @@ from plyfile import PlyData, PlyElement
 from utils.sh_utils import RGB2SH
 from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
-from utils.general_utils import strip_symmetric, build_scaling_rotation
+from utils.general_utils import strip_symmetric, build_scaling_rotation, cdist
 import time
 from tqdm import tqdm 
 
@@ -458,7 +458,7 @@ class GaussianModel:
         for i in range(0, xyz.shape[0], chunk_size):
             chunk = xyz[i:i+chunk_size]
 
-            distances = torch.cdist(chunk, xyz)
+            distances = cdist(chunk, xyz)
 
             # USE FAISS INSTEAD?
             k_neighbors_indices = torch.topk(distances, k=k+1, largest=False, sorted=False)[1][:, 1:]

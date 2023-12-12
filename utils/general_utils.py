@@ -131,3 +131,19 @@ def safe_state(silent):
     np.random.seed(0)
     torch.manual_seed(0)
     torch.cuda.set_device(torch.device("cuda:0"))
+
+def cdist(x, y):
+    """
+    Compute the distance between each pair of the two collections of inputs.
+
+    params:
+        x: (N, D) tensor
+        y: (M, D) tensor
+    
+    returns:
+        (N, M) tensor of distances
+    """
+    x_norm = x.pow(2).sum(dim=1, keepdim=True)
+    y_norm = y.pow(2).sum(dim=1, keepdim=True)
+    res = torch.addmm(y_norm.transpose(-2, -1), x, y.transpose(-2, -1), alpha=-2).add_(x_norm)
+    return res.clamp_min_(1e-30).sqrt_()

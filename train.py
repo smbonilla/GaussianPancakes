@@ -15,7 +15,7 @@ from utils.loss_utils import l1_loss, ssim, l2_loss
 from gaussian_renderer import render, network_gui
 import sys
 from scene import Scene, GaussianModel
-from utils.general_utils import safe_state
+from utils.general_utils import safe_state, cdist
 import uuid
 from tqdm import tqdm
 from utils.image_utils import psnr
@@ -45,7 +45,7 @@ def compute_geometric_loss(gaussian_normals, original_normals, weight=1, chunk_s
         gauss_chunk = gaussian_normals[i:i+chunk_size]
 
         # compute pairwise distance between gaussian_chunk and original_normals x y z
-        distance_matrix = torch.cdist(gauss_chunk[:, :3], original_normals[:, :3])
+        distance_matrix = cdist(gauss_chunk[:, :3], original_normals[:, :3])
         min_distance_idx = torch.argmin(distance_matrix, dim=1)
         closest_original_matrix = original_normals[min_distance_idx]
 
