@@ -10,6 +10,8 @@
 #
 import os
 import torch
+import faiss
+import faiss.contrib.torch_utils
 from random import randint
 from utils.loss_utils import l1_loss, ssim, l2_loss
 from gaussian_renderer import render, network_gui
@@ -27,13 +29,15 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
-def compute_geometric_loss(gaussian_normals, original_normals, weight=1, chunk_size=1000):
+def compute_geometric_loss(gaussian_normals, original_normals, index, weight=1, chunk_size=50000):
     """    
     Compute the geometric loss between gaussian normals and original normals. without faiss
 
     :param 
         gaussian_normals: Tensor of shape (N, 3, 6) representing gaussian normals.
         original_normals: Tensor of shape (M, 3, 6) representing original normals.
+        index: Faiss index on gpu to be used for nearest neighbor search.
+        weight: Weight of the geometric loss.
         chunk_size: Size of chunks to be used for processing to manage GPU memory usage.
 
     :return: The computed L1 loss.
@@ -45,8 +49,11 @@ def compute_geometric_loss(gaussian_normals, original_normals, weight=1, chunk_s
         gauss_chunk = gaussian_normals[i:i+chunk_size] # (chunk_size, 3, 6)
 
         # compute pairwise distance between gaussian_chunk and original_normals x y z
-        distance_matrix = cdist(gauss_chunk[:, 0, :3], original_normals[:, 0, :3])
-        closest_original_matrix = original_normals[torch.argmin(distance_matrix, dim=1)]
+        # distance_matrix = cdist(gauss_chunk[:, 0, :3], original_normals[:, 0, :3])
+        _, closest_indices = index.search(gauss_chunk[:, 0, :3].contiguous(), 1) # output is (chunk_size, 1)
+        # grab the closest original normal for each gaussian normal
+        closest_original_matrix = original_normals[closest_indices.squeeze()] # (chunk_size, 3, 6)
+        # closest_original_matrix = original_normals[torch.argmin(distance_matrix, dim=1)]
 
         chunk_loss = l1_loss(gauss_chunk[:,:,3:], closest_original_matrix[:,:,3:])
 
@@ -76,7 +83,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
     # Compute original normals and gaussian normals - intialize a global cache to store closest pair information
-    original_normals = gaussians.compute_point_cloud_normals().detach() # (M, 6) (x, y, z, nx, ny, nz)
+    original_normals = gaussians.compute_point_cloud_normals().detach()
+
+    # initialize the faiss index
+    res = faiss.StandardGpuResources()
+    gpu_index = faiss.GpuIndexFlatL2(res, 3)
+    gpu_index.add(original_normals[:, 0, :3].contiguous()) # original normals are on gpu already so no need to copy them? 
 
     iter_start = torch.cuda.Event(enable_timing = True)
     iter_end = torch.cuda.Event(enable_timing = True)
@@ -124,24 +136,22 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gaussian_normals = gaussians.get_gaussian_normals()
 
         # Loss
-        if iteration < 7000:
-            weight = 1
-        elif iteration < 15000:
-            weight = 0.5
+        if iteration < 15000:
+            # make weight linearly decrease from 1 to 0.5 over the first 15000 iterations
+            weight = 1 - ((iteration / 15000) * 0.5)
+            geometric_loss = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=weight)
+            # DELETE ME - DEBUGGING
+            # WRITE GEOMETRIC LOSS TO txt FILE
+            with open("geometric_loss.txt", "a") as f:
+                f.write(str(geometric_loss.item()) + "\n")
         else:
-            weight = 0.1
-        geometric_loss = compute_geometric_loss(gaussian_normals, original_normals, weight=1)
-
+            geometric_loss = 0.0
+    
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image) 
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + geometric_loss # ADD GEOMETRIC LOSS REGULARIZATION lambda 
 
         loss.backward()
-
-        # DELETE ME - DEBUGGING
-        # WRITE GEOMETRIC LOSS TO txt FILE
-        with open("geometric_loss.txt", "a") as f:
-          f.write(str(geometric_loss.item()) + "\n")
 
         iter_end.record()
 
