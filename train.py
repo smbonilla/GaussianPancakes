@@ -32,8 +32,8 @@ def compute_geometric_loss(gaussian_normals, original_normals, weight=1, chunk_s
     Compute the geometric loss between gaussian normals and original normals.
 
     :param 
-        gaussian_normals: Tensor of shape (N, 6) representing gaussian normals.
-        original_normals: Tensor of shape (M, 6) representing original normals.
+        gaussian_normals: Tensor of shape (N, 3, 6) representing gaussian normals.
+        original_normals: Tensor of shape (M, 3, 6) representing original normals.
         chunk_size: Size of chunks to be used for processing to manage GPU memory usage.
 
     :return: The computed L1 loss.
@@ -42,26 +42,22 @@ def compute_geometric_loss(gaussian_normals, original_normals, weight=1, chunk_s
     total_loss = 0.0
 
     for i in range(0, gaussian_normals.size(0), chunk_size):
-        gauss_chunk = gaussian_normals[i:i+chunk_size]
+        gauss_chunk = gaussian_normals[i:i+chunk_size] # (chunk_size, 3, 6)
 
         # compute pairwise distance between gaussian_chunk and original_normals x y z
-        distance_matrix = cdist(gauss_chunk[:, :3], original_normals[:, :3])
-        min_distance_idx = torch.argmin(distance_matrix, dim=1)
-        closest_original_matrix = original_normals[min_distance_idx]
+        distance_matrix = cdist(gauss_chunk[:, 0, :3], original_normals[:, 0, :3])
+        closest_original_matrix = original_normals[torch.argmin(distance_matrix, dim=1)]
 
-        chunk_loss = l1_loss(gauss_chunk[:,3:], closest_original_matrix[:,3:])
+        chunk_loss = l1_loss(gauss_chunk[:,:,3:], closest_original_matrix[:,:,3:])
 
         if torch.isnan(chunk_loss).any() or torch.isinf(chunk_loss).any():
             print(f"Warning: NaN or inf found in chunk_loss at chunk {i}")
 
         total_loss += torch.sum(chunk_loss)
     
-    num_chunks = gaussian_normals.size(0) / chunk_size
-    total_loss = total_loss / num_chunks
-
-    total_loss = total_loss * weight
+    total_loss = total_loss / gaussian_normals.size(0) / chunk_size
     
-    return total_loss
+    return total_loss * weight
 
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
@@ -78,6 +74,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
+    # Compute original normals and gaussian normals - intialize a global cache to store closest pair information
     original_normals = gaussians.compute_point_cloud_normals().detach() # (M, 6) (x, y, z, nx, ny, nz)
 
     iter_start = torch.cuda.Event(enable_timing = True)
@@ -126,6 +123,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gaussian_normals = gaussians.get_gaussian_normals()
 
         # Loss
+        if iteration < 7000:
+            weight = 1
+        elif iteration < 15000:
+            weight = 0.5
+        else:
+            weight = 0.1
         geometric_loss = compute_geometric_loss(gaussian_normals, original_normals, weight=1)
 
         gt_image = viewpoint_cam.original_image.cuda()

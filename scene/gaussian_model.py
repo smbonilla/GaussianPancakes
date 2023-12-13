@@ -420,17 +420,11 @@ class GaussianModel:
 
     def get_gaussian_normals(self):
         """
-        Compute the normal of the 3D Gaussian as the shortest vector.
+        Compute the normal of the 3D Gaussian and concatenate with xyz.
         """
-        covariance_matrix = self.get_actual_covariance() # size is (N, 3, 3) - initially [x, 0, 0; 0, x, 0; 0, 0, x]
-
-        normal_vector = covariance_matrix[:, 0, :] # choose the first row of the covariance matrix as the normal vector
-
-        # normalize the normal vector... just in case
-        normals_normalized = torch.nn.functional.normalize(normal_vector, dim=1) # size is (N, 3)
-
-        # concatenate the normals with the xyz coordinates
-        normals_normalized = torch.cat((self.get_xyz, normals_normalized), dim=1) # size is (N, 6)
+        normal_mat_normalized = torch.nn.functional.normalize(self.get_actual_covariance(), dim=2)
+        xyz_expanded = self.get_xyz.unsqueeze(1).expand(-1, 3, -1) # (N, 3, 3)
+        normals_normalized = torch.cat((xyz_expanded, normal_mat_normalized), dim=2) # (N, 3, 6)
 
         return normals_normalized
 
@@ -460,7 +454,6 @@ class GaussianModel:
 
             distances = cdist(chunk, xyz)
 
-            # USE FAISS INSTEAD?
             k_neighbors_indices = torch.topk(distances, k=k+1, largest=False, sorted=False)[1][:, 1:]
 
             flat_indices = k_neighbors_indices.reshape(-1)
@@ -475,10 +468,11 @@ class GaussianModel:
 
             _, eigenvectors = torch.linalg.eigh(covariance_matrices)
 
-            normals = eigenvectors[..., 0]
+            # normals = eigenvectors[..., 0] # size is N x 3
+            normals = eigenvectors # grab all the normals, size is N x 3 x 3
 
             eps  = 1e-8
-            normals_normalized = torch.nn.functional.normalize(normals, dim=1, eps=eps) 
+            normals_normalized = torch.nn.functional.normalize(normals, dim=2, eps=eps) 
 
             if all_normals is None:
                 all_normals = normals_normalized
@@ -488,21 +482,11 @@ class GaussianModel:
             pbar.update(1)
         pbar.close()
 
-        all_normals = torch.cat((xyz, all_normals), dim=1) # size is (N, 6)
+        xyz_expanded = xyz.unsqueeze(1).expand(-1, 3, -1) # size is (N, 3, 3)
+
+        all_normals = torch.cat((xyz_expanded, all_normals), dim=2) # size is (N, 3, 6)
+        # all_normals = torch.cat((xyz, all_normals), dim=1) # size is (N, 6)
 
         end = time.time()
         print("Finished computing normals in {} seconds.".format(end-start))
         return all_normals
-
-    def named_parameters(self):
-        return {
-            "xyz": self._xyz,
-            "f_dc": self._features_dc,
-            "f_rest": self._features_rest,
-            "opacity": self._opacity,
-            "scaling" : self._scaling,
-            "rotation" : self._rotation, 
-            'xyz_grad_accum': self.xyz_gradient_accum,
-            'denom': self.denom,
-            'max_radii2D': self.max_radii2D
-        }
