@@ -29,7 +29,7 @@ except ImportError:
 
 def compute_geometric_loss(gaussian_normals, original_normals, weight=1, chunk_size=1000):
     """    
-    Compute the geometric loss between gaussian normals and original normals.
+    Compute the geometric loss between gaussian normals and original normals. without faiss
 
     :param 
         gaussian_normals: Tensor of shape (N, 3, 6) representing gaussian normals.
