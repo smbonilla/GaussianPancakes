@@ -7,5 +7,5 @@ diff_rasterization/dist
 tensorboard_3d
 screenshots
 .DS_Store
-geometric_loss_908.txt
+geometric_loss.txt
 *.txt
