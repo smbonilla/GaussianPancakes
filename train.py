@@ -55,7 +55,8 @@ def compute_geometric_loss(gaussian_normals, original_normals, weight=1, chunk_s
 
         total_loss += torch.sum(chunk_loss)
     
-    total_loss = total_loss / gaussian_normals.size(0) / chunk_size
+    num_chunks = gaussian_normals.size(0) / chunk_size
+    total_loss = total_loss / num_chunks
     
     return total_loss * weight
 
