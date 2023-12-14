@@ -29,7 +29,7 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
-def compute_geometric_loss(gaussian_normals, original_normals, index, weight=1, chunk_size=50000):
+def compute_geometric_loss(gaussian_normals, original_normals, index, weight=1):
     """    
     Compute the geometric loss between gaussian normals and original normals. without faiss
 
@@ -38,34 +38,13 @@ def compute_geometric_loss(gaussian_normals, original_normals, index, weight=1, 
         original_normals: Tensor of shape (M, 3, 6) representing original normals.
         index: Faiss index on gpu to be used for nearest neighbor search.
         weight: Weight of the geometric loss.
-        chunk_size: Size of chunks to be used for processing to manage GPU memory usage.
 
     :return: The computed L1 loss.
     """
-
-    total_loss = 0.0
-
-    for i in range(0, gaussian_normals.size(0), chunk_size):
-        gauss_chunk = gaussian_normals[i:i+chunk_size] # (chunk_size, 3, 6)
-
-        # compute pairwise distance between gaussian_chunk and original_normals x y z
-        # distance_matrix = cdist(gauss_chunk[:, 0, :3], original_normals[:, 0, :3])
-        _, closest_indices = index.search(gauss_chunk[:, 0, :3].contiguous(), 1) # output is (chunk_size, 1)
-        # grab the closest original normal for each gaussian normal
-        closest_original_matrix = original_normals[closest_indices.squeeze()] # (chunk_size, 3, 6)
-        # closest_original_matrix = original_normals[torch.argmin(distance_matrix, dim=1)]
-
-        chunk_loss = l1_loss(gauss_chunk[:,:,3:], closest_original_matrix[:,:,3:])
-
-        if torch.isnan(chunk_loss).any() or torch.isinf(chunk_loss).any():
-            print(f"Warning: NaN or inf found in chunk_loss at chunk {i}")
-
-        total_loss += torch.sum(chunk_loss)
-    
-    num_chunks = gaussian_normals.size(0) / chunk_size
-    total_loss = total_loss / num_chunks
-    
-    return total_loss * weight
+    _, closest_indices = index.search(gaussian_normals[:, 0, :3].contiguous(), 1)
+    closest_original_matrix = original_normals[closest_indices.squeeze()]  # (N, 3, 6)
+    loss = l1_loss(gaussian_normals[:, :, 3:], closest_original_matrix[:, :, 3:])
+    return loss.mean() * weight
 
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
@@ -132,13 +111,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         render_pkg = render(viewpoint_cam, gaussians, pipe, background)
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
-        # Compute Gaussian normals
-        gaussian_normals = gaussians.get_gaussian_normals()
+        # Loss computation every 2 iterations
+        if iteration % 2 == 0:
+            # Compute Gaussian normals
+            gaussian_normals = gaussians.get_gaussian_normals() # this is the slow bit - not even the geometric loss 
 
-        # Loss
-        if iteration < 15000:
-            # make weight linearly decrease from 1 to 0.5 over the first 15000 iterations
-            weight = 1 - ((iteration / 15000) * 0.5)
+            # make weight linearly decrease from 1 to 0 over the first 15000 iterations
+            #weight = 1 - ((iteration / 15000))
+            weight = 1
             geometric_loss = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=weight)
             # DELETE ME - DEBUGGING
             # WRITE GEOMETRIC LOSS TO txt FILE
