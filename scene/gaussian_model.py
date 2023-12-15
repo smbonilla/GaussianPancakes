@@ -422,13 +422,12 @@ class GaussianModel:
         """
         Compute the normal of the 3D Gaussian and concatenate with xyz.
         """
-        normal_mat_normalized = torch.nn.functional.normalize(self.get_actual_covariance(), dim=2)
-        xyz_expanded = self.get_xyz.unsqueeze(1).expand(-1, 3, -1) # (N, 3, 3)
-        normals_normalized = torch.cat((xyz_expanded, normal_mat_normalized), dim=2) # (N, 3, 6)
-
+        # only take the first rows of rotation matrix
+        normal_mat_normalized = torch.nn.functional.normalize(self.get_actual_covariance()[:,0,:], dim=1) # (N, 3)
+        normals_normalized = torch.cat((self.get_xyz, normal_mat_normalized), dim=1) # (N, 6)
         return normals_normalized
 
-    def compute_point_cloud_normals(self, k=20):
+    def compute_point_cloud_normals(self, k=10):
         """
         Compute normal vectors for each point in the point cloud using PCA on the neighborhood.
 
@@ -468,11 +467,11 @@ class GaussianModel:
 
             _, eigenvectors = torch.linalg.eigh(covariance_matrices)
 
-            # normals = eigenvectors[..., 0] # size is N x 3
-            normals = eigenvectors # grab all the normals, size is N x 3 x 3
+            normals = eigenvectors[..., 0] # size is N x 3
+            # normals = eigenvectors # grab all the normals, size is N x 3 x 3
 
             eps  = 1e-8
-            normals_normalized = torch.nn.functional.normalize(normals, dim=2, eps=eps) 
+            normals_normalized = torch.nn.functional.normalize(normals, dim=1, eps=eps) 
 
             if all_normals is None:
                 all_normals = normals_normalized
@@ -482,10 +481,9 @@ class GaussianModel:
             pbar.update(1)
         pbar.close()
 
-        xyz_expanded = xyz.unsqueeze(1).expand(-1, 3, -1) # size is (N, 3, 3)
+        # xyz_expanded = xyz.unsqueeze(1).expand(-1, 3, -1) # size is (N, 3, 3)
 
-        all_normals = torch.cat((xyz_expanded, all_normals), dim=2) # size is (N, 3, 6)
-        # all_normals = torch.cat((xyz, all_normals), dim=1) # size is (N, 6)
+        all_normals = torch.cat((xyz, all_normals), dim=1) # size is (N, 6)
 
         end = time.time()
         print("Finished computing normals in {} seconds.".format(end-start))

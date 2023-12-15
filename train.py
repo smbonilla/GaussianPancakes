@@ -34,16 +34,16 @@ def compute_geometric_loss(gaussian_normals, original_normals, index, weight=1):
     Compute the geometric loss between gaussian normals and original normals. without faiss
 
     :param 
-        gaussian_normals: Tensor of shape (N, 3, 6) representing gaussian normals.
-        original_normals: Tensor of shape (M, 3, 6) representing original normals.
+        gaussian_normals: Tensor of shape (N, 6) representing gaussian normals.
+        original_normals: Tensor of shape (M, 6) representing original normals.
         index: Faiss index on gpu to be used for nearest neighbor search.
         weight: Weight of the geometric loss.
 
     :return: The computed L1 loss.
     """
-    _, closest_indices = index.search(gaussian_normals[:, 0, :3].contiguous(), 1)
-    closest_original_matrix = original_normals[closest_indices.squeeze()]  # (N, 3, 6)
-    loss = l1_loss(gaussian_normals[:, :, 3:], closest_original_matrix[:, :, 3:])
+    _, closest_indices = index.search(gaussian_normals[:, :3].contiguous(), 1)
+    closest_original_matrix = original_normals[closest_indices.squeeze()]  # (N, 6)
+    loss = l1_loss(gaussian_normals[:, 3:], closest_original_matrix[:, 3:])
     return loss.mean() * weight
 
 
@@ -62,12 +62,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
     # Compute original normals and gaussian normals - intialize a global cache to store closest pair information
-    original_normals = gaussians.compute_point_cloud_normals().detach()
+    original_normals = gaussians.compute_point_cloud_normals(k=30).detach()
 
     # initialize the faiss index
     res = faiss.StandardGpuResources()
     gpu_index = faiss.GpuIndexFlatL2(res, 3)
-    gpu_index.add(original_normals[:, 0, :3].contiguous()) # original normals are on gpu already so no need to copy them? 
+    gpu_index.add(original_normals[:, :3].contiguous()) 
 
     iter_start = torch.cuda.Event(enable_timing = True)
     iter_end = torch.cuda.Event(enable_timing = True)
@@ -111,14 +111,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         render_pkg = render(viewpoint_cam, gaussians, pipe, background)
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
-        # Loss computation every 2 iterations
-        if iteration % 2 == 0:
-            # Compute Gaussian normals
-            gaussian_normals = gaussians.get_gaussian_normals() # this is the slow bit - not even the geometric loss 
-            weight = 1
-            geometric_loss = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=weight)
-        else:
-            geometric_loss = 0.0
+        gaussian_normals = gaussians.get_gaussian_normals() # this is the slow bit - not even the geometric loss 
+        weight = 1
+        geometric_loss = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=weight)
     
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image) 
