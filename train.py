@@ -115,15 +115,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if iteration % 2 == 0:
             # Compute Gaussian normals
             gaussian_normals = gaussians.get_gaussian_normals() # this is the slow bit - not even the geometric loss 
-
-            # make weight linearly decrease from 1 to 0 over the first 15000 iterations
-            #weight = 1 - ((iteration / 15000))
             weight = 1
             geometric_loss = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=weight)
-            # DELETE ME - DEBUGGING
-            # WRITE GEOMETRIC LOSS TO txt FILE
-            with open("geometric_loss.txt", "a") as f:
-                f.write(str(geometric_loss.item()) + "\n")
         else:
             geometric_loss = 0.0
     

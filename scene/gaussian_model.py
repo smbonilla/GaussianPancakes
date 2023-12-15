@@ -428,7 +428,7 @@ class GaussianModel:
 
         return normals_normalized
 
-    def compute_point_cloud_normals(self, k=10):
+    def compute_point_cloud_normals(self, k=20):
         """
         Compute normal vectors for each point in the point cloud using PCA on the neighborhood.
 
