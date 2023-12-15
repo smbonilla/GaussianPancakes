@@ -60,9 +60,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-
+ 
     # Compute original normals and gaussian normals - intialize a global cache to store closest pair information
-    original_normals = gaussians.compute_point_cloud_normals(k=30).detach()
+    original_normals = gaussians.compute_point_cloud_normals(k=10, plotting=False).detach()
 
     # initialize the faiss index
     res = faiss.StandardGpuResources()

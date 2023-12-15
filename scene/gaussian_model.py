@@ -22,6 +22,10 @@ from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation, cdist
 import time
 from tqdm import tqdm 
+# delete me if u wanna 
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import pickle
 
 class GaussianModel:
 
@@ -32,10 +36,12 @@ class GaussianModel:
             symm = strip_symmetric(actual_covariance)
             return symm
         
-        def return_actual_covariance(scaling, scaling_modifier, rotation):
-            L = build_scaling_rotation(scaling_modifier * scaling, rotation)
-            actual_covariance = L @ L.transpose(1, 2)
-            return actual_covariance
+        def return_surface_normal(scaling, scaling_modifier, rotation):
+            L = build_scaling_rotation(scaling_modifier * scaling, rotation) # (N, 3, 3)
+            _, min_index = torch.min(scaling, dim=1) # (N)
+            min_index = min_index.unsqueeze(-1).unsqueeze(-1).expand(-1, L.size(1), L.size(2)) # (N, 3, 3)
+            surface_normal = L.gather(1, min_index).squeeze(1)[:,0]
+            return surface_normal
         
         self.scaling_activation = torch.exp
         self.scaling_inverse_activation = torch.log
@@ -47,7 +53,7 @@ class GaussianModel:
 
         self.rotation_activation = torch.nn.functional.normalize
 
-        self.actual_covariance = return_actual_covariance
+        self.surface_normal = return_surface_normal
 
 
     def __init__(self, sh_degree : int):
@@ -126,8 +132,8 @@ class GaussianModel:
     def get_covariance(self, scaling_modifier = 1):
         return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)
     
-    def get_actual_covariance(self, scaling_modifier = 1):
-        return self.actual_covariance(self.get_scaling, scaling_modifier, self._rotation)
+    def get_surface_normal(self, scaling_modifier = 1):
+        return self.surface_normal(self.get_scaling, scaling_modifier, self._rotation)
 
     def oneupSHdegree(self):
         if self.active_sh_degree < self.max_sh_degree:
@@ -367,9 +373,10 @@ class GaussianModel:
         selected_pts_mask = torch.logical_and(selected_pts_mask,
                                               torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent)
 
-        stds = self.get_scaling[selected_pts_mask].repeat(N,1)
-        means =torch.zeros((stds.size(0), 3),device="cuda")
-        samples = torch.normal(mean=means, std=stds)
+        # limit how much it moves away possibly? or instead limit the size of gaussians
+        stds = 0.1*self.get_scaling[selected_pts_mask].repeat(N,1) 
+        means =torch.zeros((stds.size(0), 3),device="cuda") 
+        samples = torch.normal(mean=means, std=stds) 
         rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N,1,1)
         new_xyz = torch.bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + self.get_xyz[selected_pts_mask].repeat(N, 1)
         new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
@@ -422,12 +429,11 @@ class GaussianModel:
         """
         Compute the normal of the 3D Gaussian and concatenate with xyz.
         """
-        # only take the first rows of rotation matrix
-        normal_mat_normalized = torch.nn.functional.normalize(self.get_actual_covariance()[:,0,:], dim=1) # (N, 3)
+        normal_mat_normalized = torch.nn.functional.normalize(self.get_surface_normal(), dim=1) # (N, 3)
         normals_normalized = torch.cat((self.get_xyz, normal_mat_normalized), dim=1) # (N, 6)
         return normals_normalized
 
-    def compute_point_cloud_normals(self, k=10):
+    def compute_point_cloud_normals(self, k=10, plotting=False):
         """
         Compute normal vectors for each point in the point cloud using PCA on the neighborhood.
 
@@ -481,10 +487,17 @@ class GaussianModel:
             pbar.update(1)
         pbar.close()
 
-        # xyz_expanded = xyz.unsqueeze(1).expand(-1, 3, -1) # size is (N, 3, 3)
-
         all_normals = torch.cat((xyz, all_normals), dim=1) # size is (N, 6)
 
         end = time.time()
         print("Finished computing normals in {} seconds.".format(end-start))
+
+        if plotting:
+            # Assuming 'xyz' and 'normals' are your data
+            plot_data = {
+                'xyz': xyz.cpu().detach().numpy(),
+                'normals': all_normals.cpu().detach().numpy()
+            }
+            with open('my_figure.pickle', 'wb') as f:
+                pickle.dump(plot_data, f)
         return all_normals
