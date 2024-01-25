@@ -374,7 +374,7 @@ class GaussianModel:
                                               torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent)
 
         # limit how much it moves away possibly? or instead limit the size of gaussians
-        stds = 0.1*self.get_scaling[selected_pts_mask].repeat(N,1) 
+        stds = 0.01*self.get_scaling[selected_pts_mask].repeat(N,1) # CHANGED THIS 
         means =torch.zeros((stds.size(0), 3),device="cuda") 
         samples = torch.normal(mean=means, std=stds) 
         rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N,1,1)
