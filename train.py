@@ -10,8 +10,10 @@
 #
 import os
 import torch
+from torch.utils.data import DataLoader
 import faiss
 import faiss.contrib.torch_utils
+import lpips
 from random import randint
 from utils.loss_utils import l1_loss, ssim, l2_loss
 from gaussian_renderer import render, network_gui
@@ -31,7 +33,7 @@ except ImportError:
 
 def compute_geometric_loss(gaussian_normals, original_normals, index, weight=1):
     """    
-    Compute the geometric loss between gaussian normals and original normals. without faiss
+    Compute the geometric loss between gaussian normals and original normals.
 
     :param 
         gaussian_normals: Tensor of shape (N, 6) representing gaussian normals.
@@ -42,7 +44,7 @@ def compute_geometric_loss(gaussian_normals, original_normals, index, weight=1):
     :return: The computed L1 loss.
     """
     _, closest_indices = index.search(gaussian_normals[:, :3].contiguous(), 1)
-    closest_original_matrix = original_normals[closest_indices.squeeze()]  # (N, 6)
+    closest_original_matrix = original_normals[closest_indices.squeeze()] 
     loss = l1_loss(gaussian_normals[:, 3:], closest_original_matrix[:, 3:])
     return loss.mean() * weight
 
@@ -61,7 +63,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
  
-    # Compute original normals and gaussian normals - intialize a global cache to store closest pair information
+    # Compute original normals
     original_normals = gaussians.compute_point_cloud_normals(k=20, plotting=False).detach()
 
     # initialize the faiss index
@@ -76,6 +78,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
+
+    lpips_model = lpips.LPIPS(net='vgg').cuda()
+
     for iteration in range(first_iter, opt.iterations + 1):        
         if network_gui.conn == None:
             network_gui.try_connect()
@@ -100,24 +105,72 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if iteration % 1000 == 0:
             gaussians.oneupSHdegree()
 
-        # Pick a random Camera
+        # Create viewpoint DataLoader for batch_size = 16
         if not viewpoint_stack:
             viewpoint_stack = scene.getTrainCameras().copy()
-        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+            batch_size = 16
+            viewpoint_stack_loader = DataLoader(viewpoint_stack, batch_size=batch_size, shuffle=True, num_workers=32, collate_fn=list)
+            loader = iter(viewpoint_stack_loader)
+        
+        if opt.dataloader:
+            try:
+                viewpoint_cams = next(loader)
+            except StopIteration:
+                print("reset dataloader")
+                loader = iter(viewpoint_stack_loader)
+        else:
+            idx = randint(0, len(viewpoint_stack)-1)
+            viewpoint_cams = [viewpoint_stack[idx]]
 
         # Render
         if (iteration - 1) == debug_from:
             pipe.debug = True
-        render_pkg = render(viewpoint_cam, gaussians, pipe, background)
-        image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+
+        images = []
+        depths = []
+        gt_images = []
+        gt_depths = []
+        radiis = []
+        visibility_filters = []
+        viewspace_point_tensors = []
+
+        for viewpoint_cam in viewpoint_cams:
+            render_pkg = render(viewpoint_cam, gaussians, pipe, background)
+            image, depth, viewspace_point_tensor, visibility_filter, radii = \
+                render_pkg["render"], render_pkg["depth"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"] 
+            gt_image = viewpoint_cam.original_image.cuda().float()
+            gt_depth = viewpoint_cam.original_depth.cuda().float()
+
+            images.append(image.unsqueeze(0))
+            depths.append(depth.unsqueeze(0))
+            gt_images.append(gt_image.unsqueeze(0))
+            gt_depths.append(gt_depth.unsqueeze(0))
+            radiis.append(radii.unsqueeze(0))
+            visibility_filters.append(visibility_filter.unsqueeze(0))
+            viewspace_point_tensors.append(viewspace_point_tensor.unsqueeze(0))
+        
+        image_tensor = torch.cat(images, dim=0)
+        depth_tensor = torch.cat(depths, dim=0)
+        gt_image_tensor = torch.cat(gt_images, dim=0)
+        gt_depth_tensor = torch.cat(gt_depths, dim=0)
+        radii_tensor = torch.cat(radiis, dim=0)
+        visibility_filter_tensor = torch.cat(visibility_filters, dim=0)
 
         gaussian_normals = gaussians.get_gaussian_normals() # this is the slow bit - not even the geometric loss 
-        weight = 1
-        geometric_loss = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=weight)
-    
-        gt_image = viewpoint_cam.original_image.cuda()
-        Ll1 = l1_loss(image, gt_image) 
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + geometric_loss # ADD GEOMETRIC LOSS REGULARIZATION lambda 
+        L_normals = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=1)
+
+        L1_images = l1_loss(image_tensor, gt_image_tensor)
+
+        L1_depths = l1_loss(depth_tensor, gt_depth_tensor)
+
+        loss = (1.0 - opt.lambda_dssim) * L1_images + opt.lambda_norm * L_normals + opt.lambda_depth * L1_depths # +  opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+
+        if opt.lambda_dssim != 0:
+            L_dssim = 1.0 - ssim(image_tensor, gt_image_tensor)
+            loss += opt.lambda_dssim * L_dssim
+        if opt.lambda_lpips != 0:
+            L_lpips = lpips_model(image_tensor, gt_image_tensor).mean()
+            loss += opt.lambda_lpips * L_lpips
 
         loss.backward()
 
@@ -133,7 +186,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 progress_bar.close()
 
             # Log and save
-            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
+            training_report(tb_writer, iteration, L1_images, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
