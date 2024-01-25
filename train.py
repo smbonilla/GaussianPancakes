@@ -11,6 +11,7 @@
 import os
 import torch
 from torch.utils.data import DataLoader
+import torch.nn.functional as F
 import faiss
 import faiss.contrib.torch_utils
 import lpips
@@ -153,17 +154,17 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         depth_tensor = torch.cat(depths, dim=0)
         gt_image_tensor = torch.cat(gt_images, dim=0)
         gt_depth_tensor = torch.cat(gt_depths, dim=0)
-        radii_tensor = torch.cat(radiis, dim=0)
-        visibility_filter_tensor = torch.cat(visibility_filters, dim=0)
+        radii = torch.cat(radiis,0).max(dim=0).values
+        visibility_filter = torch.cat(visibility_filters).any(dim=0)
 
         gaussian_normals = gaussians.get_gaussian_normals() # this is the slow bit - not even the geometric loss 
         L_normals = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=1)
 
         L1_images = l1_loss(image_tensor, gt_image_tensor)
 
-        L1_depths = l1_loss(depth_tensor, gt_depth_tensor)
+        L_depths = F.huber_loss(depth_tensor, gt_depth_tensor, delta=0.2) # l1_loss(depth_tensor, gt_depth_tensor)
 
-        loss = (1.0 - opt.lambda_dssim) * L1_images + opt.lambda_norm * L_normals + opt.lambda_depth * L1_depths # +  opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+        loss = (1.0 - opt.lambda_dssim) * L1_images + opt.lambda_norm * L_normals + opt.lambda_depth * L_depths # +  opt.lambda_dssim * (1.0 - ssim(image, gt_image))
 
         if opt.lambda_dssim != 0:
             L_dssim = 1.0 - ssim(image_tensor, gt_image_tensor)
@@ -173,6 +174,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             loss += opt.lambda_lpips * L_lpips
 
         loss.backward()
+
+        viewspace_point_tensor_grad = torch.zeros_like(viewspace_point_tensor)
+        for idx in range(0, len(viewspace_point_tensors)):
+            viewspace_point_tensor_grad = viewspace_point_tensor_grad + viewspace_point_tensors[idx].grad
 
         iter_end.record()
 
@@ -195,7 +200,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             if iteration < opt.densify_until_iter:
                 # Keep track of max radii in image-space for pruning
                 gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
-                gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
+                gaussians.add_densification_stats(viewspace_point_tensor_grad, visibility_filter)
 
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
