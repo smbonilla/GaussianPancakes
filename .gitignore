@@ -9,3 +9,4 @@ screenshots
 .DS_Store
 geometric_loss.txt
 *.txt
+lpipsPyTorch
