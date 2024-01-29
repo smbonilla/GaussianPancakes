@@ -23,6 +23,8 @@ from pathlib import Path
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
+from scene.rnnslam_loader import readRNNSIM
+from utils.obj_utils import read_obj 
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -113,13 +115,14 @@ def fetchPly(path):
     normals = np.vstack([vertices['nx'], vertices['ny'], vertices['nz']]).T
     return BasicPointCloud(points=positions, colors=colors, normals=normals)
 
-def storePly(path, xyz, rgb):
+def storePly(path, xyz, rgb, normals=None):
     # Define the dtype for the structured array
     dtype = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'),
             ('nx', 'f4'), ('ny', 'f4'), ('nz', 'f4'),
             ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
     
-    normals = np.zeros_like(xyz)
+    if normals is None:
+        normals = np.zeros_like(xyz)
 
     elements = np.empty(xyz.shape[0], dtype=dtype)
     attributes = np.concatenate((xyz, normals, rgb), axis=1)
@@ -255,22 +258,19 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
                            ply_path=ply_path)
     return scene_info
 
-def readRNNSLAMSceneInfo(path, images, depths, eval, llffhold=8):
-    try:
-        cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.bin")
-        cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.bin")
-        cam_extrinsics = read_extrinsics_binary(cameras_extrinsic_file)
-        cam_intrinsics = read_intrinsics_binary(cameras_intrinsic_file)
-    except:
-        cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.txt")
-        cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.txt")
-        cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
-        cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
+def readRNNSIMSceneInfo(path, images, depths, eval, llffhold=8):
+
+    extrinsics_file = [f for f in os.listdir(path) if f.endswith("_poses.txt")][0]
+    extr_file_path = os.path.join(path, extrinsics_file)
+    intrinsics_file = "cameras.txt"
+    intr_file_path = os.path.join(path, intrinsics_file)
 
     reading_dir = "images" if images == None else images
     depths_dir = "depths" if depths == None else depths
-    cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=os.path.join(path, reading_dir))
-    cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
+
+    cam_infos_unsorted = readRNNSIM(extrinsics_file=extr_file_path, intrinsics_file=intr_file_path, 
+                                    images_folder=os.path.join(path, reading_dir), depths_folder=os.path.join(path, depths_dir))
+    cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.uid)
 
     if eval:
         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
@@ -281,16 +281,19 @@ def readRNNSLAMSceneInfo(path, images, depths, eval, llffhold=8):
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
 
-    # Could convert obj mesh here to ply if needed 
-    ply_path = os.path.join(path, "sparse/0/points3D.ply")
-    bin_path = os.path.join(path, "sparse/0/points3D.bin")
-    txt_path = os.path.join(path, "sparse/0/points3D.txt")
+
+    obj_file = [f for f in os.listdir(path) if f.endswith(".obj")][0]
+    obj_path = os.path.join(path, obj_file)
+    ply_path = os.path.join(path, "points3D.ply")
+
+    # convert obj to ply
     if not os.path.exists(ply_path):
-        print("Converting point3d.bin to .ply, will happen only the first time you open the scene.")
+        print("Converting mesh.obj to .ply, will happen only the first time you open the scene.")
         try:
-            xyz, rgb, _ = read_points3D_binary(bin_path)
-        except:
-            xyz, rgb, _ = read_points3D_text(txt_path)
+            xyz, rgb = read_obj(obj_path)
+        except Exception as e:
+            print('Error reading obj file: {}'.format(e))
+            return None
         storePly(ply_path, xyz, rgb)
     try:
         pcd = fetchPly(ply_path)
@@ -304,8 +307,16 @@ def readRNNSLAMSceneInfo(path, images, depths, eval, llffhold=8):
                            ply_path=ply_path)
     return scene_info
 
+def readRNNC3VDSceneInfo(path, images, depths, eval, llffhold=8):
+    return None
+
+def readRNNVIVOSceneInfo(path, images, depths, eval, llffhold=8):
+    return None
+
 sceneLoadTypeCallbacks = {
     "Colmap": readColmapSceneInfo,
     "Blender" : readNerfSyntheticInfo, 
-    "RNNSLAM" : readRNNSLAMSceneInfo
+    "RNNSIM" : readRNNSIMSceneInfo,
+    "RNNC3VD": readRNNC3VDSceneInfo,
+    "RNNVIVO": readRNNVIVOSceneInfo
 }

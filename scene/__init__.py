@@ -11,6 +11,7 @@
 
 import os
 import random
+import glob
 import json
 from utils.system_utils import searchForMaxIteration
 from scene.dataset_readers import sceneLoadTypeCallbacks
@@ -41,7 +42,17 @@ class Scene:
         self.test_cameras = {}
 
         if os.path.exists(os.path.join(args.source_path, args.depths)):
-            scene_info = sceneLoadTypeCallbacks["RNNSLAM"](args.source_path, args.images, args.depths, args.eval)
+            if glob.glob(os.path.join(args.source_path, "*_poses.txt")):
+                print("RNNSIM dataset detected!")
+                scene_info = sceneLoadTypeCallbacks["RNNSIM"](args.source_path, args.images, args.depths, args.eval)
+            elif glob.glob(os.path.join(args.source_path, "*.ply")):
+                print("RNNC3VD dataset detected!")
+                scene_info = sceneLoadTypeCallbacks["RNNC3VD"](args.source_path, args.images, args.depths, args.eval)
+            elif os.path.exists(os.path.join(args.source_path, "RNN-DP.txt")):
+                print("RNNVIVO dataset detected!")
+                scene_info = sceneLoadTypeCallbacks["RNNVIVO"](args.source_path, args.images, args.depths, args.eval)
+            else:
+                assert False, "Could not recognize scene type!"
         elif os.path.exists(os.path.join(args.source_path, "sparse")):
             scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path, args.images, args.eval)
         elif os.path.exists(os.path.join(args.source_path, "transforms_train.json")):
