@@ -74,7 +74,7 @@ def covert_row_of_TUM(TUM_pose_row, camera_id=1, image_name='placeholder', depth
     """
 
     # TUM_pose_row = [id, tx, ty, tz, qx, qy, qz, qw]
-    if len(str(TUM_pose_row[0]).split('.')) == 3:
+    if len(str(TUM_pose_row[0]).split('.')) == 3 or str(TUM_pose_row[0]).startswith('1305'):
         id = id
     else:
         id = int(TUM_pose_row[0])
@@ -188,12 +188,11 @@ def readRNNSIM(extrinsics_file, intrinsics_file, images_folder, depths_folder):
         print('Error reading extrinsics file: {}'.format(e))
         return None
 
-
     cam_infos = []
     for idx, key in enumerate(cam_extrinsics):
         sys.stdout.write('\r')
         # the exact output you're looking for:
-        sys.stdout.write("Reading camera {}/{}".format(idx+1, len(cam_extrinsics)))
+        sys.stdout.write("Reading camera {}/{} for RNNSIM data".format(idx+1, len(cam_extrinsics)))
         sys.stdout.flush()
 
         extr = cam_extrinsics[key]
@@ -223,7 +222,7 @@ def readRNNSIM(extrinsics_file, intrinsics_file, images_folder, depths_folder):
 
         depth_path = os.path.join(depths_folder, os.path.basename(extr.depth_name))
         depth_name = os.path.basename(depth_path).split(".")[0]
-        depth = Image.open(depth_path) # may need to change datatype 
+        depth = Image.open(depth_path) 
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
                               image_path=image_path, image_name=image_name, depth=depth, 
