@@ -222,7 +222,13 @@ def readRNNSIM(extrinsics_file, intrinsics_file, images_folder, depths_folder):
 
         depth_path = os.path.join(depths_folder, os.path.basename(extr.depth_name))
         depth_name = os.path.basename(depth_path).split(".")[0]
-        depth = Image.open(depth_path) 
+        depth = Image.open(depth_path)
+        depth = np.array(depth)
+        depth = depth / np.max(depth)
+        # inverse so that white is closer and black is further
+        depth = 1 - depth
+        depth = (depth * 255).astype(np.float32)
+        depth = Image.fromarray(depth) 
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
                               image_path=image_path, image_name=image_name, depth=depth, 

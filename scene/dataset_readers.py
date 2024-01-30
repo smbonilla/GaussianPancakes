@@ -291,10 +291,12 @@ def readRNNSIMSceneInfo(path, images, depths, eval, llffhold=8):
         print("Converting mesh.obj to .ply, will happen only the first time you open the scene.")
         try:
             xyz, rgb = read_obj(obj_path)
+            # print the rgb values 
+            print(rgb)
         except Exception as e:
             print('Error reading obj file: {}'.format(e))
             return None
-        storePly(ply_path, xyz, rgb)
+        storePly(ply_path, xyz, rgb*255)
     try:
         pcd = fetchPly(ply_path)
     except:

@@ -8,6 +8,11 @@
 #
 # For inquiries contact  george.drettakis@inria.fr
 #
+# delete me
+import numpy as np
+from PIL import Image
+
+
 import os
 import torch
 from torch.utils.data import DataLoader
@@ -106,78 +111,69 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if iteration % 1000 == 0:
             gaussians.oneupSHdegree()
 
-        # Create viewpoint DataLoader for batch_size = 16
+        # Pick a random Camera
         if not viewpoint_stack:
             viewpoint_stack = scene.getTrainCameras().copy()
-            batch_size = 16
-            viewpoint_stack_loader = DataLoader(viewpoint_stack, batch_size=batch_size, shuffle=True, num_workers=32, collate_fn=list)
-            loader = iter(viewpoint_stack_loader)
-        
-        if opt.dataloader:
-            try:
-                viewpoint_cams = next(loader)
-            except StopIteration:
-                print("reset dataloader")
-                loader = iter(viewpoint_stack_loader)
-        else:
-            idx = randint(0, len(viewpoint_stack)-1)
-            viewpoint_cams = [viewpoint_stack[idx]]
+        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
 
         # Render
         if (iteration - 1) == debug_from:
             pipe.debug = True
 
-        images = []
-        depths = []
-        gt_images = []
-        gt_depths = []
-        radiis = []
-        visibility_filters = []
-        viewspace_point_tensor_list = []
+        render_pkg = render(viewpoint_cam, gaussians, pipe, background)
+        image, depth, viewspace_point_tensor, visibility_filter, radii = \
+            render_pkg["render"], render_pkg["depth"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
-        for viewpoint_cam in viewpoint_cams:
-            render_pkg = render(viewpoint_cam, gaussians, pipe, background)
-            image, depth, viewspace_point_tensor, visibility_filter, radii = \
-                render_pkg["render"], render_pkg["depth"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"] 
-            gt_image = viewpoint_cam.original_image.cuda().float()
-            gt_depth = viewpoint_cam.original_depth.cuda().float()
+        gt_image = viewpoint_cam.original_image.cuda() 
+        gt_depth = viewpoint_cam.original_depth.cuda()
 
-            images.append(image.unsqueeze(0))
-            depths.append(depth.unsqueeze(0))
-            gt_images.append(gt_image.unsqueeze(0))
-            gt_depths.append(gt_depth.unsqueeze(0))
-            radiis.append(radii.unsqueeze(0))
-            visibility_filters.append(visibility_filter.unsqueeze(0))
-            viewspace_point_tensor_list.append(viewspace_point_tensor)
+        if iteration == 1000:
+            #save all gt images and rendered images and gt depths and rendered depths for debugging then break code
+            print('saving images')
+            # save all as png
+            save_image = image.detach().cpu().numpy()
+            save_image = save_image.transpose(1, 2, 0)
+            save_image = (save_image * 255).astype(np.uint8)
+            # print average pixel value and min and max values
+            print('average pixel value: ', np.mean(save_image))
+            print('min pixel value: ', np.min(save_image))
+            print('max pixel value: ', np.max(save_image))
+            save_image = Image.fromarray(save_image)
+            save_image.save('rendered_image.png')
 
-        image_tensor = torch.cat(images, dim=0)
-        depth_tensor = torch.cat(depths, dim=0)
-        gt_image_tensor = torch.cat(gt_images, dim=0)
-        gt_depth_tensor = torch.cat(gt_depths, dim=0)
-        radii = torch.cat(radiis,0).max(dim=0).values
-        visibility_filter = torch.cat(visibility_filters).any(dim=0)
+            save_gt_image = gt_image.detach().cpu().numpy()
+            save_gt_image = save_gt_image.transpose(1, 2, 0)
+            save_gt_image = (save_gt_image * 255).astype(np.uint8)
+            save_gt_image = Image.fromarray(save_gt_image)
+            save_gt_image.save('gt_image.png')
+
+            save_depth = np.squeeze(depth.detach().cpu().numpy()) # shape (240,320)
+            save_depth = (save_depth * 255).astype(np.uint8)
+            save_depth = Image.fromarray(save_depth)
+            save_depth.save('rendered_depth.png')
+
+            save_gt_depth = np.squeeze(gt_depth.detach().cpu().numpy())
+            save_gt_depth = (save_gt_depth * 255).astype(np.uint8)
+            save_gt_depth = Image.fromarray(save_gt_depth)
+            save_gt_depth.save('gt_depth.png')
 
         gaussian_normals = gaussians.get_gaussian_normals() # this is the slow bit - not even the geometric loss 
         L_normals = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=1)
 
-        L1_images = l1_loss(image_tensor, gt_image_tensor)
+        L1_images = l1_loss(image, gt_image)
 
-        L_depths = F.huber_loss(depth_tensor, gt_depth_tensor, delta=0.2) # l1_loss(depth_tensor, gt_depth_tensor)
+        L_depths = F.huber_loss(depth, gt_depth, delta=0.2) # l1_loss(depth_tensor, gt_depth_tensor)
 
         loss = (1.0 - opt.lambda_dssim) * L1_images + opt.lambda_norm * L_normals + opt.lambda_depth * L_depths # +  opt.lambda_dssim * (1.0 - ssim(image, gt_image))
 
         if opt.lambda_dssim != 0:
-            L_dssim = 1.0 - ssim(image_tensor, gt_image_tensor)
+            L_dssim = 1.0 - ssim(image, gt_image)
             loss += opt.lambda_dssim * L_dssim
         # if opt.lambda_lpips != 0:
         #     L_lpips = lpips_model(image_tensor, gt_image_tensor).mean()
         #     loss += opt.lambda_lpips * L_lpips
 
         loss.backward()
-
-        viewspace_point_tensor_grad = torch.zeros_like(viewspace_point_tensor)
-        for idx in range(0, len(viewspace_point_tensor_list)):
-            viewspace_point_tensor_grad = viewspace_point_tensor_grad + viewspace_point_tensor_list[idx].grad
 
         iter_end.record()
 
@@ -200,7 +196,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             if iteration < opt.densify_until_iter:
                 # Keep track of max radii in image-space for pruning
                 gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
-                gaussians.add_densification_stats(viewspace_point_tensor_grad, visibility_filter)
+                gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
