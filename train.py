@@ -80,7 +80,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
 
-    lpips_model = lpips.LPIPS(net='vgg').cuda()
+    # lpips_model = lpips.LPIPS(net='vgg').cuda()
 
     for iteration in range(first_iter, opt.iterations + 1):        
         if network_gui.conn == None:
@@ -133,7 +133,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gt_depths = []
         radiis = []
         visibility_filters = []
-        viewspace_point_tensors = []
+        viewspace_point_tensor_list = []
 
         for viewpoint_cam in viewpoint_cams:
             render_pkg = render(viewpoint_cam, gaussians, pipe, background)
@@ -148,8 +148,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             gt_depths.append(gt_depth.unsqueeze(0))
             radiis.append(radii.unsqueeze(0))
             visibility_filters.append(visibility_filter.unsqueeze(0))
-            viewspace_point_tensors.append(viewspace_point_tensor.unsqueeze(0))
-        
+            viewspace_point_tensor_list.append(viewspace_point_tensor)
+
         image_tensor = torch.cat(images, dim=0)
         depth_tensor = torch.cat(depths, dim=0)
         gt_image_tensor = torch.cat(gt_images, dim=0)
@@ -169,15 +169,15 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if opt.lambda_dssim != 0:
             L_dssim = 1.0 - ssim(image_tensor, gt_image_tensor)
             loss += opt.lambda_dssim * L_dssim
-        if opt.lambda_lpips != 0:
-            L_lpips = lpips_model(image_tensor, gt_image_tensor).mean()
-            loss += opt.lambda_lpips * L_lpips
+        # if opt.lambda_lpips != 0:
+        #     L_lpips = lpips_model(image_tensor, gt_image_tensor).mean()
+        #     loss += opt.lambda_lpips * L_lpips
 
         loss.backward()
 
         viewspace_point_tensor_grad = torch.zeros_like(viewspace_point_tensor)
-        for idx in range(0, len(viewspace_point_tensors)):
-            viewspace_point_tensor_grad = viewspace_point_tensor_grad + viewspace_point_tensors[idx].grad
+        for idx in range(0, len(viewspace_point_tensor_list)):
+            viewspace_point_tensor_grad = viewspace_point_tensor_grad + viewspace_point_tensor_list[idx].grad
 
         iter_end.record()
 

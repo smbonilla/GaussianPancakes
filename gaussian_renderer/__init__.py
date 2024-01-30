@@ -9,9 +9,6 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-# delete me - debugging
-import inspect 
-
 import torch
 import math
 from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
@@ -35,8 +32,6 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     # Set up rasterization configuration
     tanfovx = math.tan(viewpoint_camera.FoVx * 0.5)
     tanfovy = math.tan(viewpoint_camera.FoVy * 0.5)
-
-    print("Rasterizer source file: ", inspect.getsourcefile(GaussianRasterizer))
 
     raster_settings = GaussianRasterizationSettings(
         image_height=int(viewpoint_camera.image_height),
