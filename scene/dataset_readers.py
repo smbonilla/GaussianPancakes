@@ -33,8 +33,11 @@ class CameraInfo(NamedTuple):
     FovY: np.array
     FovX: np.array
     image: np.array
+    depth: np.array
     image_path: str
     image_name: str
+    depth_path: str
+    depth_name: str
     width: int
     height: int
 
@@ -68,7 +71,7 @@ def getNerfppNorm(cam_info):
 
     return {"translate": translate, "radius": radius}
 
-def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
+def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, depths_folder):
     cam_infos = []
     for idx, key in enumerate(cam_extrinsics):
         sys.stdout.write('\r')
@@ -101,8 +104,23 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
         image_name = os.path.basename(image_path).split(".")[0]
         image = Image.open(image_path)
 
+        depth_path = os.path.join(depths_folder, os.path.basename(extr.name))
+        depth_name = os.path.basename(depth_path).split(".")[0]
+        depth = Image.open(depth_path)
+        depth = np.array(depth)
+        depth = depth / np.max(depth)
+        # inverse so that white is closer and black is further
+        # depth = 1 - depth
+        depth = (depth * 255).astype(np.float32)
+        # if depth image has rgb values so (1, 1, 3) just take one channel of last dimension
+        if len(depth.shape) == 3:
+            depth = depth[:, :, 0]
+        depth = Image.fromarray(depth) 
+
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
-                              image_path=image_path, image_name=image_name, width=width, height=height)
+                              image_path=image_path, image_name=image_name, 
+                              depth=depth, depth_name=depth_name, depth_path=depth_path,
+                              width=width, height=height)
         cam_infos.append(cam_info)
     sys.stdout.write('\n')
     return cam_infos
@@ -133,7 +151,7 @@ def storePly(path, xyz, rgb, normals=None):
     ply_data = PlyData([vertex_element])
     ply_data.write(path)
 
-def readColmapSceneInfo(path, images, eval, llffhold=8):
+def readColmapSceneInfo(path, images, eval, llffhold=8, depths=None):
     try:
         cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.bin")
         cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.bin")
@@ -146,7 +164,9 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
         cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
 
     reading_dir = "images" if images == None else images
-    cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=os.path.join(path, reading_dir))
+    depth_dir = "depths" if depths == None else depths
+    cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, 
+                                           images_folder=os.path.join(path, reading_dir), depths_folder=os.path.join(path, depth_dir))
     cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
 
     if eval:

@@ -41,7 +41,7 @@ class Scene:
         self.train_cameras = {}
         self.test_cameras = {}
 
-        if os.path.exists(os.path.join(args.source_path, args.depths)):
+        if os.path.exists(os.path.join(args.source_path, "cameras.txt")):
             if glob.glob(os.path.join(args.source_path, "*_poses.txt")):
                 print("RNNSIM dataset detected!")
                 scene_info = sceneLoadTypeCallbacks["RNNSIM"](args.source_path, args.images, args.depths, args.eval)

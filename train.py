@@ -56,7 +56,6 @@ def compute_geometric_loss(gaussian_normals, original_normals, index, weight=1):
 
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
-    torch.autograd.set_detect_anomaly(True) # REMOVE ME
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
@@ -114,7 +113,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Pick a random Camera
         if not viewpoint_stack:
             viewpoint_stack = scene.getTrainCameras().copy()
-        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+        randinteger = randint(0, len(viewpoint_stack)-1)
+        viewpoint_cam = viewpoint_stack.pop(randinteger)
 
         # Render
         if (iteration - 1) == debug_from:
@@ -127,7 +127,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gt_image = viewpoint_cam.original_image.cuda() 
         gt_depth = viewpoint_cam.original_depth.cuda()
 
-        if iteration == 1000:
+        if (randinteger == 0 and iteration % 20 == 0) or iteration == 1:
             #save all gt images and rendered images and gt depths and rendered depths for debugging then break code
             print('saving images')
             # save all as png
@@ -139,32 +139,32 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             print('min pixel value: ', np.min(save_image))
             print('max pixel value: ', np.max(save_image))
             save_image = Image.fromarray(save_image)
-            save_image.save('rendered_image.png')
+            save_image.save(f'assets/testing/rendered_image_{iteration}.png')
 
             save_gt_image = gt_image.detach().cpu().numpy()
             save_gt_image = save_gt_image.transpose(1, 2, 0)
             save_gt_image = (save_gt_image * 255).astype(np.uint8)
             save_gt_image = Image.fromarray(save_gt_image)
-            save_gt_image.save('gt_image.png')
+            save_gt_image.save(f'assets/testing/gt_image.png')
 
             save_depth = np.squeeze(depth.detach().cpu().numpy()) # shape (240,320)
             save_depth = (save_depth * 255).astype(np.uint8)
             save_depth = Image.fromarray(save_depth)
-            save_depth.save('rendered_depth.png')
+            save_depth.save(f'assets/testing/rendered_depth_{iteration}.png')
 
             save_gt_depth = np.squeeze(gt_depth.detach().cpu().numpy())
             save_gt_depth = (save_gt_depth * 255).astype(np.uint8)
             save_gt_depth = Image.fromarray(save_gt_depth)
-            save_gt_depth.save('gt_depth.png')
+            save_gt_depth.save(f'assets/testing/gt_depth.png')
 
-        gaussian_normals = gaussians.get_gaussian_normals() # this is the slow bit - not even the geometric loss 
-        L_normals = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=1)
+        # gaussian_normals = gaussians.get_gaussian_normals() # this is the slow bit - not even the geometric loss 
+        # L_normals = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=1)
 
         L1_images = l1_loss(image, gt_image)
 
         L_depths = F.huber_loss(depth, gt_depth, delta=0.2) # l1_loss(depth_tensor, gt_depth_tensor)
 
-        loss = (1.0 - opt.lambda_dssim) * L1_images + opt.lambda_norm * L_normals + opt.lambda_depth * L_depths # +  opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+        loss = (1.0 - opt.lambda_dssim) * L1_images + opt.lambda_depth * L_depths # + opt.lambda_norm * L_normals  # +  opt.lambda_dssim * (1.0 - ssim(image, gt_image))
 
         if opt.lambda_dssim != 0:
             L_dssim = 1.0 - ssim(image, gt_image)

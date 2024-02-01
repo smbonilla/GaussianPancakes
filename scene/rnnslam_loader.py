@@ -226,7 +226,7 @@ def readRNNSIM(extrinsics_file, intrinsics_file, images_folder, depths_folder):
         depth = np.array(depth)
         depth = depth / np.max(depth)
         # inverse so that white is closer and black is further
-        depth = 1 - depth
+        # depth = 1 - depth
         depth = (depth * 255).astype(np.float32)
         depth = Image.fromarray(depth) 
 

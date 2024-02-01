@@ -84,8 +84,8 @@ class OptimizationParams(ParamGroup):
         self.percent_dense = 0.01
 
         self.lambda_dssim = 0.2
-        self.lambda_norm = 1
-        self.lambda_depth = 0.3
+        self.lambda_norm = 0.5
+        self.lambda_depth = 0.5
         self.lambda_lpips = 0.2
         
         self.densification_interval = 100
