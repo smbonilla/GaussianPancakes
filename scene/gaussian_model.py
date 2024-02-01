@@ -37,9 +37,9 @@ class GaussianModel:
             return symm
         
         def return_surface_normal(scaling, scaling_modifier, rotation):
-            L = build_scaling_rotation(scaling_modifier * scaling, rotation) # (N, 3, 3)
-            _, min_index = torch.min(scaling, dim=1) # (N)
-            min_index = min_index.unsqueeze(-1).unsqueeze(-1).expand(-1, L.size(1), L.size(2)) # (N, 3, 3)
+            L = build_scaling_rotation(scaling_modifier * scaling, rotation) 
+            _, min_index = torch.max(scaling, dim=1)
+            min_index = min_index.unsqueeze(-1).unsqueeze(-1).expand(-1, L.size(1), L.size(2)) 
             surface_normal = L.gather(1, min_index).squeeze(1)[:,0]
             return surface_normal
         
@@ -377,7 +377,7 @@ class GaussianModel:
                                               torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent)
 
         # limit how much it moves away possibly? or instead limit the size of gaussians
-        stds = 0.01*self.get_scaling[selected_pts_mask].repeat(N,1) 
+        stds = self.get_scaling[selected_pts_mask].repeat(N,1)*0.1
         means =torch.zeros((stds.size(0), 3),device="cuda") 
         samples = torch.normal(mean=means, std=stds) 
         rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N,1,1)
@@ -432,8 +432,8 @@ class GaussianModel:
         """
         Compute the normal of the 3D Gaussian and concatenate with xyz.
         """
-        normal_mat_normalized = torch.nn.functional.normalize(self.get_surface_normal(), dim=1) # (N, 3)
-        normals_normalized = torch.cat((self.get_xyz, normal_mat_normalized), dim=1) # (N, 6)
+        normal_mat_normalized = torch.nn.functional.normalize(self.get_surface_normal(), dim=1) 
+        normals_normalized = torch.cat((self.get_xyz, normal_mat_normalized), dim=1) 
         return normals_normalized
 
     def compute_point_cloud_normals(self, k=10, plotting=False):
@@ -477,7 +477,6 @@ class GaussianModel:
             _, eigenvectors = torch.linalg.eigh(covariance_matrices)
 
             normals = eigenvectors[..., 0] # size is N x 3
-            # normals = eigenvectors # grab all the normals, size is N x 3 x 3
 
             eps  = 1e-8
             normals_normalized = torch.nn.functional.normalize(normals, dim=1, eps=eps) 

@@ -68,13 +68,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
  
-    # Compute original normals
-    original_normals = gaussians.compute_point_cloud_normals(k=20, plotting=False).detach()
-
-    # initialize the faiss index
-    res = faiss.StandardGpuResources()
-    gpu_index = faiss.GpuIndexFlatL2(res, 3)
-    gpu_index.add(original_normals[:, :3].contiguous()) 
+    if opt.lambda_norm != 0:
+        original_normals = gaussians.compute_point_cloud_normals(k=10, plotting=False).detach()
+        res = faiss.StandardGpuResources()
+        gpu_index = faiss.GpuIndexFlatL2(res, 3)
+        gpu_index.add(original_normals[:, :3].contiguous()) 
 
     iter_start = torch.cuda.Event(enable_timing = True)
     iter_end = torch.cuda.Event(enable_timing = True)
@@ -84,7 +82,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
 
-    # lpips_model = lpips.LPIPS(net='vgg').cuda()
+    lpips_model = lpips.LPIPS(net='vgg').cuda()
 
     for iteration in range(first_iter, opt.iterations + 1):        
         if network_gui.conn == None:
@@ -127,7 +125,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gt_image = viewpoint_cam.original_image.cuda() 
         gt_depth = viewpoint_cam.original_depth.cuda()
 
-        if (randinteger == 0 and iteration % 20 == 0) or iteration == 1:
+        if iteration == 1000 or iteration == 1 or iteration == 3000:
             #save all gt images and rendered images and gt depths and rendered depths for debugging then break code
             print('saving images')
             # save all as png
@@ -157,21 +155,24 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             save_gt_depth = Image.fromarray(save_gt_depth)
             save_gt_depth.save(f'assets/testing/gt_depth.png')
 
-        # gaussian_normals = gaussians.get_gaussian_normals() # this is the slow bit - not even the geometric loss 
-        # L_normals = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=1)
-
         L1_images = l1_loss(image, gt_image)
 
-        L_depths = F.huber_loss(depth, gt_depth, delta=0.2) # l1_loss(depth_tensor, gt_depth_tensor)
+        L_depths = F.huber_loss(depth, gt_depth, delta=0.2) 
 
-        loss = (1.0 - opt.lambda_dssim) * L1_images + opt.lambda_depth * L_depths # + opt.lambda_norm * L_normals  # +  opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+        loss = (1.0 - opt.lambda_dssim) * L1_images + opt.lambda_depth * L_depths 
+        psnr_ = psnr(image, gt_image).mean().double()
 
         if opt.lambda_dssim != 0:
             L_dssim = 1.0 - ssim(image, gt_image)
             loss += opt.lambda_dssim * L_dssim
-        # if opt.lambda_lpips != 0:
-        #     L_lpips = lpips_model(image_tensor, gt_image_tensor).mean()
-        #     loss += opt.lambda_lpips * L_lpips
+        if opt.lambda_norm != 0 & iteration % 2 == 0:
+            gaussian_normals = gaussians.get_gaussian_normals()  
+            L_normals = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=1)
+            loss += opt.lambda_norm * L_normals
+        # use lpips for first 500 and last 500 iterations
+        if opt.lambda_lpips != 0 and (iteration > opt.iterations - 500 or iteration < 500):
+            L_lpips = lpips_model(image, gt_image).mean()
+            loss += opt.lambda_lpips * L_lpips
 
         loss.backward()
 
@@ -180,8 +181,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         with torch.no_grad():
             # Progress bar
             ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
+            total_points = gaussians.get_xyz.shape[0]
             if iteration % 10 == 0:
-                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
+                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}", "PSNR": f"{psnr_:.{3}f}", "Points": f"{total_points}"})
                 progress_bar.update(10)
             if iteration == opt.iterations:
                 progress_bar.close()
