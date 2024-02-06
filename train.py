@@ -24,6 +24,7 @@ from random import randint
 from utils.loss_utils import l1_loss, ssim, l2_loss
 from gaussian_renderer import render, network_gui
 import sys
+import warnings
 from scene import Scene, GaussianModel
 from utils.general_utils import safe_state, cdist
 import uuid
@@ -36,6 +37,8 @@ try:
     TENSORBOARD_FOUND = True
 except ImportError:
     TENSORBOARD_FOUND = False
+
+warnings.filterwarnings("ignore", category=UserWarning)
 
 def compute_geometric_loss(gaussian_normals, original_normals, index, weight=1):
     """    
@@ -67,6 +70,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+
+    # print test iterations
+    print("\nTesting iterations: ", testing_iterations)
  
     if opt.lambda_norm != 0:
         original_normals = gaussians.compute_point_cloud_normals(k=10, plotting=False).detach()
@@ -126,16 +132,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gt_depth = viewpoint_cam.original_depth.cuda()
 
         if iteration == 1000 or iteration == 1 or iteration == 3000:
-            #save all gt images and rendered images and gt depths and rendered depths for debugging then break code
             print('saving images')
-            # save all as png
             save_image = image.detach().cpu().numpy()
             save_image = save_image.transpose(1, 2, 0)
             save_image = (save_image * 255).astype(np.uint8)
-            # print average pixel value and min and max values
-            print('average pixel value: ', np.mean(save_image))
-            print('min pixel value: ', np.min(save_image))
-            print('max pixel value: ', np.max(save_image))
             save_image = Image.fromarray(save_image)
             save_image.save(f'assets/testing/rendered_image_{iteration}.png')
 
@@ -145,7 +145,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             save_gt_image = Image.fromarray(save_gt_image)
             save_gt_image.save(f'assets/testing/gt_image.png')
 
-            save_depth = np.squeeze(depth.detach().cpu().numpy()) # shape (240,320)
+            save_depth = np.squeeze(depth.detach().cpu().numpy()) 
             save_depth = (save_depth * 255).astype(np.uint8)
             save_depth = Image.fromarray(save_depth)
             save_depth.save(f'assets/testing/rendered_depth_{iteration}.png')
@@ -169,8 +169,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             gaussian_normals = gaussians.get_gaussian_normals()  
             L_normals = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=1)
             loss += opt.lambda_norm * L_normals
-        # use lpips for first 500 and last 500 iterations
-        if opt.lambda_lpips != 0 and (iteration > opt.iterations - 500 or iteration < 500):
+        if opt.lambda_lpips != 0 and (iteration > opt.iterations - opt.lpips_itr_end or iteration < opt.lpips_itr_beg):
             L_lpips = lpips_model(image, gt_image).mean()
             loss += opt.lambda_lpips * L_lpips
 
@@ -249,11 +248,15 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
         torch.cuda.empty_cache()
         validation_configs = ({'name': 'test', 'cameras' : scene.getTestCameras()}, 
                               {'name': 'train', 'cameras' : [scene.getTrainCameras()[idx % len(scene.getTrainCameras())] for idx in range(5, 30, 5)]})
+        
+        lpips_model = lpips.LPIPS(net='vgg').cuda()
 
         for config in validation_configs:
             if config['cameras'] and len(config['cameras']) > 0:
-                l1_test = 0.0
-                psnr_test = 0.0
+                l1_test = []
+                psnr_test = []
+                lpips_test = []
+                ssim_test = []
                 for idx, viewpoint in enumerate(config['cameras']):
                     image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0)
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
@@ -261,11 +264,19 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                         tb_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name), image[None], global_step=iteration)
                         if iteration == testing_iterations[0]:
                             tb_writer.add_images(config['name'] + "_view_{}/ground_truth".format(viewpoint.image_name), gt_image[None], global_step=iteration)
-                    l1_test += l1_loss(image, gt_image).mean().double()
-                    psnr_test += psnr(image, gt_image).mean().double()
-                psnr_test /= len(config['cameras'])
-                l1_test /= len(config['cameras'])    
-                print("\n[ITER {}] Evaluating {}: L1 {} PSNR {}".format(iteration, config['name'], l1_test, psnr_test))
+                    l1_test.append(l1_loss(image, gt_image).mean().double())
+                    psnr_test.append(psnr(image, gt_image).mean().double())
+                    lpips_test.append(lpips_model(image, gt_image).mean().double())
+                    ssim_test.append(ssim(image, gt_image).mean().double())
+                psnr_test_avg = sum(psnr_test) / len(psnr_test)
+                l1_test_avg = sum(l1_test) / len(l1_test)
+                lpips_test_avg = sum(lpips_test) / len(lpips_test)
+                ssim_test_avg = sum(ssim_test) / len(ssim_test)
+                psnr_test_std = torch.std(torch.tensor(psnr_test))
+                l1_test_std = torch.std(torch.tensor(l1_test))
+                lpips_test_std = torch.std(torch.tensor(lpips_test))
+                ssim_test_std = torch.std(torch.tensor(ssim_test))
+                print("\n[ITER {}] Evaluating {}: L1 {} PSNR {} LPIPS {} SSIM {}".format(iteration, config['name'], l1_test, psnr_test, lpips_test, ssim_test))
                 if tb_writer:
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l1_loss', l1_test, iteration)
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - psnr', psnr_test, iteration)
@@ -285,8 +296,8 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[1_000, 3_000])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[1_000, 3_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)

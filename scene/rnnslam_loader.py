@@ -85,8 +85,7 @@ def covert_row_of_TUM(TUM_pose_row, camera_id=1, image_name='placeholder', depth
     qy = TUM_pose_row[5]
     qz = TUM_pose_row[6]
     qw = TUM_pose_row[7]
-
-    # first normalize quaternion
+    
     norm = math.sqrt(qx**2 + qy**2 + qz**2 + qw**2)
     qx = qx / norm
     qy = qy / norm
@@ -102,13 +101,10 @@ def covert_row_of_TUM(TUM_pose_row, camera_id=1, image_name='placeholder', depth
         print('Determinant of Rotation Matrix is not close to 1! Check rotation is proper.')
         assert False
 
-    # transpose rotmat
     colmap_rotmat = np.transpose(rotmat) 
 
-    # convert back to quaternion 
-    q =  R.from_matrix(colmap_rotmat).as_quat() # output qx qy qz qw
+    q =  R.from_matrix(colmap_rotmat).as_quat()
 
-    # convert to colmap format qw qx qy qz
     qw = q[3]
     qx = q[0]
     qy = q[1]
@@ -117,12 +113,11 @@ def covert_row_of_TUM(TUM_pose_row, camera_id=1, image_name='placeholder', depth
     tvec = [tx, ty, tz]
 
     # convert tvec to colmap format
-    tvec = np.dot(-colmap_rotmat,np.transpose(np.array(tvec))) # tx ty tz
+    tvec = np.dot(-colmap_rotmat,np.transpose(np.array(tvec))) 
 
     # colmap expects (w, x, y, z)
     qvec_new = [qw, qx, qy, qz]
 
-    # image object
     image = Image2(id=id, qvec=qvec_new, tvec=tvec, camera_id=camera_id, name=image_name, depth_name=depth_name,xys=[], point3D_ids=[]) 
 
     return image  
