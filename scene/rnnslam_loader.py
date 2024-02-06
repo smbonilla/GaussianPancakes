@@ -164,7 +164,7 @@ def readRNNSIM(extrinsics_file, intrinsics_file, images_folder, depths_folder):
     # if image files are of the format 'frame018250.jpg' or 'frame018251.jpg'
     elif len(image_files[0].split("frame")) == 2:
         image_files.sort(key=lambda f: int(f.split("frame")[1].split(".")[0]))
-        depth_files.sort(key=lambda f: int(f.split("frame")[1].split(".")[0]))
+        depth_files.sort(key=lambda f: int(f.split(".")[0]))
     # if image files are of the format '1.png'
     elif len(image_files[0].split(".")) == 2:
         image_files.sort(key=lambda f: int(f.split(".")[0]))
