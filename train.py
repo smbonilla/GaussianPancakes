@@ -25,6 +25,8 @@ from utils.loss_utils import l1_loss, ssim, l2_loss
 from gaussian_renderer import render, network_gui
 import sys
 import warnings
+# delete me
+from pytorch_msssim import ms_ssim
 from scene import Scene, GaussianModel
 from utils.general_utils import safe_state, cdist
 import uuid
@@ -87,8 +89,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
-
-    lpips_model = lpips.LPIPS(net='vgg').cuda()
 
     for iteration in range(first_iter, opt.iterations + 1):        
         if network_gui.conn == None:
@@ -169,9 +169,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             gaussian_normals = gaussians.get_gaussian_normals()  
             L_normals = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=1)
             loss += opt.lambda_norm * L_normals
-        if opt.lambda_lpips != 0 and (iteration > opt.iterations - opt.lpips_itr_end or iteration < opt.lpips_itr_beg):
-            L_lpips = lpips_model(image, gt_image).mean()
-            loss += opt.lambda_lpips * L_lpips
 
         loss.backward()
 
@@ -257,6 +254,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                 psnr_test = []
                 lpips_test = []
                 ssim_test = []
+                mssim_test = []
                 for idx, viewpoint in enumerate(config['cameras']):
                     image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0)
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
@@ -268,18 +266,24 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                     psnr_test.append(psnr(image, gt_image).mean().double())
                     lpips_test.append(lpips_model(image, gt_image).mean().double())
                     ssim_test.append(ssim(image, gt_image).mean().double())
+                    mssim_test.append(ms_ssim(image.unsqueeze(0), gt_image.unsqueeze(0), data_range=1.0).mean().double())
+
                 psnr_test_avg = sum(psnr_test) / len(psnr_test)
                 l1_test_avg = sum(l1_test) / len(l1_test)
                 lpips_test_avg = sum(lpips_test) / len(lpips_test)
                 ssim_test_avg = sum(ssim_test) / len(ssim_test)
+                mssim_test_avg = sum(mssim_test) / len(mssim_test)
                 psnr_test_std = torch.std(torch.tensor(psnr_test))
                 l1_test_std = torch.std(torch.tensor(l1_test))
                 lpips_test_std = torch.std(torch.tensor(lpips_test))
                 ssim_test_std = torch.std(torch.tensor(ssim_test))
-                print("\n[ITER {}] Evaluating {}: L1 {} PSNR {} LPIPS {} SSIM {}".format(iteration, config['name'], l1_test, psnr_test, lpips_test, ssim_test))
+                mssim_test_std = torch.std(torch.tensor(mssim_test))
+
+                print("\n[ITER {}] Evaluating {} avg: L1 {} PSNR {} LPIPS {} SSIM {} MSSIM {}".format(iteration, config['name'], l1_test_avg, psnr_test_avg, lpips_test_avg, ssim_test_avg, mssim_test_avg))
+                print("[ITER {}] Evaluating {} std: L1 {} PSNR {} LPIPS {} SSIM {} MSSIM {}".format(iteration, config['name'], l1_test_std, psnr_test_std, lpips_test_std, ssim_test_std, mssim_test_std))
                 if tb_writer:
-                    tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l1_loss', l1_test, iteration)
-                    tb_writer.add_scalar(config['name'] + '/loss_viewpoint - psnr', psnr_test, iteration)
+                    tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l1_loss', l1_test_avg, iteration)
+                    tb_writer.add_scalar(config['name'] + '/loss_viewpoint - psnr', psnr_test_avg, iteration)
 
         if tb_writer:
             tb_writer.add_histogram("scene/opacity_histogram", scene.gaussians.get_opacity, iteration)
