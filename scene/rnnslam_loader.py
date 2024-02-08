@@ -113,7 +113,7 @@ def covert_row_of_TUM(TUM_pose_row, camera_id=1, image_name='placeholder', depth
     tvec = [tx, ty, tz]
 
     # convert tvec to colmap format
-    tvec = np.dot(-colmap_rotmat,np.transpose(np.array(tvec))) 
+    tvec = np.dot(-colmap_rotmat,np.transpose(np.array(tvec)))
 
     # colmap expects (w, x, y, z)
     qvec_new = [qw, qx, qy, qz]

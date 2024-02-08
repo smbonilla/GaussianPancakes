@@ -73,6 +73,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
+    lpips_model = lpips.LPIPS(net='vgg').cuda()
+
     # print test iterations
     print("\nTesting iterations: ", testing_iterations)
  
@@ -131,7 +133,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gt_image = viewpoint_cam.original_image.cuda() 
         gt_depth = viewpoint_cam.original_depth.cuda()
 
-        if iteration == 1000 or iteration == 1 or iteration == 3000:
+        if iteration == 1000 or iteration == 1 or iteration == 3000 or iteration == 5999:
             print('saving images')
             save_image = image.detach().cpu().numpy()
             save_image = save_image.transpose(1, 2, 0)
@@ -169,6 +171,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             gaussian_normals = gaussians.get_gaussian_normals()  
             L_normals = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=1)
             loss += opt.lambda_norm * L_normals
+        # if iteration < 500 or iteration > opt.iterations - 500: 
+        #     lpips_loss = lpips_model(image, gt_image).mean()
+        #     lpips_depth_loss = lpips_model(depth, gt_depth).mean()
+        #     loss += 0.3*lpips_loss
+        #     loss += 0.3*lpips_depth_loss
 
         loss.backward()
 
@@ -300,8 +307,8 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[1_000, 3_000])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[1_000, 3_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[3_000, 6_000, 7_000])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[3_000, 6_000, 7_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)

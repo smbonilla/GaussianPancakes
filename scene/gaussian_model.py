@@ -39,8 +39,11 @@ class GaussianModel:
         def return_surface_normal(scaling, scaling_modifier, rotation):
             L = build_scaling_rotation(scaling_modifier * scaling, rotation) 
             _, min_index = torch.max(scaling, dim=1)
+            #_, min_index = torch.min(scaling, dim=1)
             min_index = min_index.unsqueeze(-1).unsqueeze(-1).expand(-1, L.size(1), L.size(2)) 
             surface_normal = L.gather(1, min_index).squeeze(1)[:,0]
+            #batch_indices = torch.arange(L.size(0), device=L.device)
+            #surface_normal = L[batch_indices, min_index]
             return surface_normal
         
         self.scaling_activation = torch.exp
@@ -377,7 +380,7 @@ class GaussianModel:
                                               torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent)
 
         # limit how much it moves away possibly? or instead limit the size of gaussians
-        stds = self.get_scaling[selected_pts_mask].repeat(N,1)*0.1
+        stds = self.get_scaling[selected_pts_mask].repeat(N,1) # *0.1
         means =torch.zeros((stds.size(0), 3),device="cuda") 
         samples = torch.normal(mean=means, std=stds) 
         rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N,1,1)
