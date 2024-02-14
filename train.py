@@ -37,12 +37,13 @@ from arguments import ModelParams, PipelineParams, OptimizationParams
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
+    print("Tensorboard found")
 except ImportError:
     TENSORBOARD_FOUND = False
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
-def compute_geometric_loss(gaussian_normals, original_normals, index, weight=1):
+def compute_geometric_loss(gaussian_normals, original_normals, index):
     """    
     Compute the geometric loss between gaussian normals and original normals.
 
@@ -55,9 +56,11 @@ def compute_geometric_loss(gaussian_normals, original_normals, index, weight=1):
     :return: The computed L1 loss.
     """
     _, closest_indices = index.search(gaussian_normals[:, :3].contiguous(), 1)
-    closest_original_matrix = original_normals[closest_indices.squeeze()] 
-    loss = l1_loss(gaussian_normals[:, 3:], closest_original_matrix[:, 3:])
-    return loss.mean() * weight
+    closest_original_normals = original_normals[closest_indices.squeeze(), 3:]
+    dot_product = (gaussian_normals[:, 3:] * closest_original_normals).sum(dim=1)
+    closest_original_normals[dot_product < 0] *= -1
+    loss = l1_loss(gaussian_normals[:,3:], closest_original_normals)
+    return loss.mean()
 
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
@@ -167,15 +170,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if opt.lambda_dssim != 0:
             L_dssim = 1.0 - ssim(image, gt_image)
             loss += opt.lambda_dssim * L_dssim
-        if opt.lambda_norm != 0 & iteration % 2 == 0:
+        if opt.lambda_norm != 0 and iteration > 1000 and iteration % 2 == 0:
             gaussian_normals = gaussians.get_gaussian_normals()  
-            L_normals = compute_geometric_loss(gaussian_normals, original_normals, gpu_index, weight=1)
-            loss += opt.lambda_norm * L_normals
-        # if iteration < 500 or iteration > opt.iterations - 500: 
-        #     lpips_loss = lpips_model(image, gt_image).mean()
-        #     lpips_depth_loss = lpips_model(depth, gt_depth).mean()
-        #     loss += 0.3*lpips_loss
-        #     loss += 0.3*lpips_depth_loss
+            L_normals = compute_geometric_loss(gaussian_normals, original_normals, gpu_index)
+            loss += opt.lambda_norm * L_normals 
 
         loss.backward()
 
@@ -261,7 +259,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                 psnr_test = []
                 lpips_test = []
                 ssim_test = []
-                mssim_test = []
+                #mssim_test = []
                 for idx, viewpoint in enumerate(config['cameras']):
                     image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0)
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
@@ -273,27 +271,27 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                     psnr_test.append(psnr(image, gt_image).mean().double())
                     lpips_test.append(lpips_model(image, gt_image).mean().double())
                     ssim_test.append(ssim(image, gt_image).mean().double())
-                    mssim_test.append(ms_ssim(image.unsqueeze(0), gt_image.unsqueeze(0), data_range=1.0).mean().double())
+                    #mssim_test.append(ms_ssim(image.unsqueeze(0), gt_image.unsqueeze(0), data_range=1.0).mean().double())
 
                 psnr_test_avg = sum(psnr_test) / len(psnr_test)
                 l1_test_avg = sum(l1_test) / len(l1_test)
                 lpips_test_avg = sum(lpips_test) / len(lpips_test)
                 ssim_test_avg = sum(ssim_test) / len(ssim_test)
-                mssim_test_avg = sum(mssim_test) / len(mssim_test)
+                #mssim_test_avg = sum(mssim_test) / len(mssim_test)
                 psnr_test_std = torch.std(torch.tensor(psnr_test))
                 l1_test_std = torch.std(torch.tensor(l1_test))
                 lpips_test_std = torch.std(torch.tensor(lpips_test))
                 ssim_test_std = torch.std(torch.tensor(ssim_test))
-                mssim_test_std = torch.std(torch.tensor(mssim_test))
+                #mssim_test_std = torch.std(torch.tensor(mssim_test))
 
-                print("\n[ITER {}] Evaluating {} avg: L1 {} PSNR {} LPIPS {} SSIM {} MSSIM {}".format(iteration, config['name'], l1_test_avg, psnr_test_avg, lpips_test_avg, ssim_test_avg, mssim_test_avg))
-                print("[ITER {}] Evaluating {} std: L1 {} PSNR {} LPIPS {} SSIM {} MSSIM {}".format(iteration, config['name'], l1_test_std, psnr_test_std, lpips_test_std, ssim_test_std, mssim_test_std))
+                print("\n[ITER {}] Evaluating {} avg: L1 {} PSNR {} LPIPS {} SSIM {}".format(iteration, config['name'], l1_test_avg, psnr_test_avg, lpips_test_avg, ssim_test_avg))
+                print("[ITER {}] Evaluating {} std: L1 {} PSNR {} LPIPS {} SSIM {}".format(iteration, config['name'], l1_test_std, psnr_test_std, lpips_test_std, ssim_test_std))
                 if tb_writer:
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l1_loss', l1_test_avg, iteration)
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - psnr', psnr_test_avg, iteration)
 
         if tb_writer:
-            tb_writer.add_histogram("scene/opacity_histogram", scene.gaussians.get_opacity, iteration)
+            # tb_writer.add_histogram("scene/opacity_histogram", scene.gaussians.get_opacity, iteration)
             tb_writer.add_scalar('total_points', scene.gaussians.get_xyz.shape[0], iteration)
         torch.cuda.empty_cache()
 
@@ -307,8 +305,8 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[3_000, 6_000, 7_000])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[3_000, 6_000, 7_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[3_000, 4_000, 5_000])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[3_000, 4_000, 5_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)

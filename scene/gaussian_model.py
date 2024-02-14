@@ -19,7 +19,7 @@ from plyfile import PlyData, PlyElement
 from utils.sh_utils import RGB2SH
 from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
-from utils.general_utils import strip_symmetric, build_scaling_rotation, cdist
+from utils.general_utils import strip_symmetric, build_scaling_rotation, cdist, build_rotation
 import time
 from tqdm import tqdm 
 # delete me if u wanna 
@@ -37,13 +37,31 @@ class GaussianModel:
             return symm
         
         def return_surface_normal(scaling, scaling_modifier, rotation):
-            L = build_scaling_rotation(scaling_modifier * scaling, rotation) 
-            _, min_index = torch.max(scaling, dim=1)
-            #_, min_index = torch.min(scaling, dim=1)
-            min_index = min_index.unsqueeze(-1).unsqueeze(-1).expand(-1, L.size(1), L.size(2)) 
-            surface_normal = L.gather(1, min_index).squeeze(1)[:,0]
-            #batch_indices = torch.arange(L.size(0), device=L.device)
-            #surface_normal = L[batch_indices, min_index]
+            # s = torch.diag_embed(scaling*scaling_modifier)
+            # R = build_rotation(rotation)
+            
+            # # Assuming the minimum scale direction is along one of the principal axes
+            # # and considering the rotation aligns these axes with the ellipsoid orientation in 3D space
+            # _, min_index = torch.min(scaling, dim=1)
+            # surface_normal = torch.zeros_like(scaling)
+            # surface_normal[range(len(scaling)), min_index] = 1 
+
+            # # Apply rotation to align the selected axis with the ellipsoid's orientation
+            # surface_normal = torch.bmm(R, surface_normal.unsqueeze(-1)).squeeze(-1)
+
+            # # Normalization might be necessary depending on subsequent usage
+            # return surface_normal
+            R = build_rotation(rotation)
+
+            # Directly select the unit vector for the minimum scale direction
+            _, min_index = torch.min(scaling * scaling_modifier, dim=1)
+            unit_vectors = torch.eye(3, device=rotation.device)  # Create a 3x3 identity matrix as basis vectors
+            selected_vectors = unit_vectors[min_index]  # Select the basis vector corresponding to the minimum scale axis
+
+            # Apply rotation to the selected vectors
+            # Since R is batched and selected_vectors are individual vectors, we need to ensure proper broadcasting
+            surface_normal = torch.einsum('bij,bj->bi', R, selected_vectors)
+
             return surface_normal
         
         self.scaling_activation = torch.exp
@@ -380,7 +398,7 @@ class GaussianModel:
                                               torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent)
 
         # limit how much it moves away possibly? or instead limit the size of gaussians
-        stds = self.get_scaling[selected_pts_mask].repeat(N,1) # *0.1
+        stds = self.get_scaling[selected_pts_mask].repeat(N,1) *0.1
         means =torch.zeros((stds.size(0), 3),device="cuda") 
         samples = torch.normal(mean=means, std=stds) 
         rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N,1,1)
@@ -479,7 +497,7 @@ class GaussianModel:
 
             _, eigenvectors = torch.linalg.eigh(covariance_matrices)
 
-            normals = eigenvectors[..., 0] # size is N x 3
+            normals = eigenvectors[..., 0]
 
             eps  = 1e-8
             normals_normalized = torch.nn.functional.normalize(normals, dim=1, eps=eps) 
@@ -503,6 +521,13 @@ class GaussianModel:
                 'xyz': xyz.cpu().detach().numpy(),
                 'normals': all_normals.cpu().detach().numpy()
             }
-            with open('my_figure.pickle', 'wb') as f:
-                pickle.dump(plot_data, f)
+            # plot and save as png file
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(plot_data['xyz'][:,0], plot_data['xyz'][:,1], plot_data['xyz'][:,2], c='r', marker='o')
+            ax.quiver(plot_data['xyz'][:,0], plot_data['xyz'][:,1], plot_data['xyz'][:,2], plot_data['normals'][:,0], plot_data['normals'][:,1], plot_data['normals'][:,2], length=0.1, normalize=True)
+            ax.view_init(0, -45)
+            plt.savefig('my_figure.png')
+            #with open('my_figure.pickle', 'wb') as f:
+            #    pickle.dump(plot_data, f)
         return all_normals

@@ -1,15 +1,18 @@
 
 #include "forward.h"
 
+// Utility function to compute the index of the minimum element
+__device__ int findMinIndex(const glm::vec3& v){
+    if (v.x < v.y) {
+        return (v.x < v.z) ? 0 : 2;
+    } else {
+        return (v.y < v.z) ? 1 : 2;
+    }
+}
+
 // contains forward pass of norm operation 
-__device__ void computeNorm(const glm::vec3 scale, float mod, const glm::vec4 rot, float* cov3D, glm::vec3& norm)
+__device__ void computeNorm(const glm::vec3 scale, float mod, const glm::vec4 rot, glm::vec3& norm)
 {
-    
-	// Create scaling matrix
-	glm::mat3 S = glm::mat3(1.0f);
-	S[0][0] = mod * scale.x;
-	S[1][1] = mod * scale.y;
-	S[2][2] = mod * scale.z;
 
 	// Normalize quaternion to get valid rotation
 	glm::vec4 q = rot;// / glm::length(rot);
@@ -25,45 +28,18 @@ __device__ void computeNorm(const glm::vec3 scale, float mod, const glm::vec4 ro
 		2.f * (x * z - r * y), 2.f * (y * z + r * x), 1.f - 2.f * (x * x + y * y)
 	);
 
-	glm::mat3 M = S * R;
+    // Compute the scaling factors and find the minimum index
+    glm::vec3 scaled = mod * scale;
+    int minIndex = findMinIndex(scaled);
 
-	// Compute 3D world covariance matrix Sigma
-	glm::mat3 Sigma = glm::transpose(M) * M;
+    // Create a 3x3 identity matrix for basis vectors 
+    glm::mat3 basis = glm::mat3(1.0f);
 
-	// Covariance is symmetric, only store upper right
-	cov3D[0] = Sigma[0][0];
-	cov3D[1] = Sigma[0][1];
-	cov3D[2] = Sigma[0][2];
-	cov3D[3] = Sigma[1][1];
-	cov3D[4] = Sigma[1][2];
-	cov3D[5] = Sigma[2][2];
+    // Select the basis vector corresponding to the minimum scale axis 
+    glm::vec3 selectedVector = basis[minIndex];
 
-    // Determine the index of the maximum scale factor
-    int maxIndex = 0;
-    float maxValue = scale.x * mod; 
-    if ((scale.y * mod) > maxValue) {
-        maxIndex = 1;
-        maxValue = scale.y * mod;
-    }
-    if ((scale.z * mod) > maxValue) {
-        maxIndex = 2;
-    }
-
-    // Compute the normal vector based on the largest scale factor
-    switch (maxIndex) {
-        case 0: // Largest scale factor is scale.x
-            norm = glm::vec3(cov3D[0], cov3D[1], cov3D[2]);
-            break;
-        case 1: // Largest scale factor is scale.y
-            norm = glm::vec3(cov3D[1], cov3D[3], cov3D[4]);
-            break;
-        case 2: // Largest scale factor is scale.z
-            norm = glm::vec3(cov3D[2], cov3D[4], cov3D[5]);
-            break;
-    }
-
-    // Normalize the normal vector
-    norm = glm::normalize(norm);
+    // Apply rotation to the selected vector to compute surface normal
+    norm = R * selectedVector;
 }
 
 // kernel that works on batches of inputs of scales and rotations 
@@ -82,10 +58,9 @@ __global__ void computeGaussNormsKernel(
 
     glm::vec3 scale = scales[idx];
     glm::vec4 rot = rotations[idx];
-    float cov3D[6];
     glm::vec3 norm;
 
-    computeNorm(scale, scale_modifier, rot, cov3D, norm);
+    computeNorm(scale, scale_modifier, rot, norm);
 
     // store compute norms 
     norms[3 * idx] = norm.x;
@@ -94,7 +69,7 @@ __global__ void computeGaussNormsKernel(
 }
 
 // wrapper function to launch the kernel
-void computeGaussNorms(
+cudaError_t computeGaussNorms(
     const glm::vec3* scales, 
     const glm::vec4* rotations, 
     float scale_modifier,
@@ -112,9 +87,14 @@ void computeGaussNorms(
         printf("Error in computeGaussNorms: %s\n", cudaGetErrorString(err));
     }
 
+    // Synchronize the device to ensure all the computation is done
+    // only for debugging purposes
     cudaDeviceSynchronize();
     err = cudaGetLastError();
     if (err != cudaSuccess) {
         printf("Cuda error after synchronization: %s\n", cudaGetErrorString(err));
     }
+
+    // return the last error encountered
+    return err;
 }
