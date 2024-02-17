@@ -1,14 +1,17 @@
 
 #include "forward.h"
+#include <stdio.h>
+#include "utils.h"
+
 
 // Utility function to compute the index of the minimum element
-__device__ int findMinIndex(const glm::vec3& v){
-    if (v.x < v.y) {
-        return (v.x < v.z) ? 0 : 2;
-    } else {
-        return (v.y < v.z) ? 1 : 2;
-    }
-}
+// __device__ int findMinIndex(const glm::vec3& v){
+//     if (v.x < v.y) {
+//         return (v.x < v.z) ? 0 : 2;
+//     } else {
+//         return (v.y < v.z) ? 1 : 2;
+//     }
+// }
 
 // contains forward pass of norm operation 
 __device__ void computeNorm(const glm::vec3 scale, float mod, const glm::vec4 rot, glm::vec3& norm)

@@ -37,20 +37,7 @@ class GaussianModel:
             return symm
         
         def return_surface_normal(scaling, scaling_modifier, rotation):
-            # s = torch.diag_embed(scaling*scaling_modifier)
-            # R = build_rotation(rotation)
             
-            # # Assuming the minimum scale direction is along one of the principal axes
-            # # and considering the rotation aligns these axes with the ellipsoid orientation in 3D space
-            # _, min_index = torch.min(scaling, dim=1)
-            # surface_normal = torch.zeros_like(scaling)
-            # surface_normal[range(len(scaling)), min_index] = 1 
-
-            # # Apply rotation to align the selected axis with the ellipsoid's orientation
-            # surface_normal = torch.bmm(R, surface_normal.unsqueeze(-1)).squeeze(-1)
-
-            # # Normalization might be necessary depending on subsequent usage
-            # return surface_normal
             R = build_rotation(rotation)
 
             # Directly select the unit vector for the minimum scale direction
@@ -398,7 +385,7 @@ class GaussianModel:
                                               torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent)
 
         # limit how much it moves away possibly? or instead limit the size of gaussians
-        stds = self.get_scaling[selected_pts_mask].repeat(N,1) *0.1
+        stds = self.get_scaling[selected_pts_mask].repeat(N,1)*0.1
         means =torch.zeros((stds.size(0), 3),device="cuda") 
         samples = torch.normal(mean=means, std=stds) 
         rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N,1,1)

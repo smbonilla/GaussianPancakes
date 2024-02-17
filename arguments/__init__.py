@@ -85,7 +85,7 @@ class OptimizationParams(ParamGroup):
 
         self.lambda_dssim = 0.2
         self.lambda_norm = 0.5
-        self.lambda_depth = 0.6
+        self.lambda_depth = 0
         
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
