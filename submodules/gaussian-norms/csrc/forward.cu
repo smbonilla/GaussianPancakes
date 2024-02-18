@@ -42,7 +42,19 @@ __device__ void computeNorm(const glm::vec3 scale, float mod, const glm::vec4 ro
     glm::vec3 selectedVector = basis[minIndex];
 
     // Apply rotation to the selected vector to compute surface normal
-    norm = R * selectedVector;
+    //norm = R * selectedVector;
+    // DIrectly select the correct column from R absed on minIndex
+    switch(minIndex) {
+        case 0:
+            norm = glm::vec3(R[0][0], R[1][0], R[2][0]); // First column for X-axis
+            break;
+        case 1:
+            norm = glm::vec3(R[0][1], R[1][1], R[2][1]); // Second column for Y-axis
+            break;
+        case 2:
+            norm = glm::vec3(R[0][2], R[1][2], R[2][2]); // Third column for Z-axis
+            break;
+    }
 }
 
 // kernel that works on batches of inputs of scales and rotations 

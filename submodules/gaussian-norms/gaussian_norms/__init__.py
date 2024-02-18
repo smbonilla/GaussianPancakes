@@ -19,14 +19,18 @@ class ComputeGaussNormFunction(Function):
         Returns:
         - normal: (num points, 3) containing the normal of each Gaussian
         """
-        normal = compute_gauss_norm_forward(scale_modifier*input_scale, input_rotation)
+        # Convert scale_modifier to a tensor if it's not one
+        if not torch.is_tensor(scale_modifier):
+            scale_modifier = torch.tensor(scale_modifier, dtype=torch.float32, device=input_scale.device)
+    
+        normal = compute_gauss_norm_forward(input_scale, input_rotation, scale_modifier)
         ctx.save_for_backward(input_scale, input_rotation, scale_modifier, normal)
         return normal
 
     @staticmethod
     def backward(ctx, grad_output):
         """
-        Backward pass of gaussian-norms.
+        Backward pass of gaussian-norms.h
 
         Parameters:
         - ctx: Context object used to stash information for backward computation
@@ -37,9 +41,22 @@ class ComputeGaussNormFunction(Function):
         - grad_input_rotation: Tensor containing the gradient of the loss with respect to the input_rotation
         - None: no gradient for scale_modifier
         """
+        input_scale, input_rotation, scale_modifier, _ = ctx.saved_tensors
+        scale_modifier_float = scale_modifier.item()  
 
-        input_scale, input_rotation, scale_modifier, normal = ctx.saved_tensors
-        grad_input_scale, grad_input_rotation = compute_gauss_norm_backward(grad_output, input_scale*scale_modifier, input_rotation, normal)
+        # Ensure tensors are contiguous
+        grad_output_contig = grad_output.contiguous()
+        input_scale_contig = input_scale.contiguous()
+        input_rotation_contig = input_rotation.contiguous()
+
+        grad_input_scale, grad_input_rotation = compute_gauss_norm_backward(
+            input_scale_contig, input_rotation_contig, grad_output_contig, scale_modifier_float
+        )
+
+        # Ensure returned gradients match the expected shapes and print their sizes
+        assert grad_input_scale.size() == input_scale.size(), "Gradient shape for scale does not match"
+        assert grad_input_rotation.size() == input_rotation.size(), "Gradient shape for rotation does not match"
+
         return grad_input_scale, grad_input_rotation, None
 
 # Alias for ease of use

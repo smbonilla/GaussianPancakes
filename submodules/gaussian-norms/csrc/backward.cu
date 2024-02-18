@@ -69,16 +69,16 @@ __device__ void computeNormBackward(int idx, const glm::vec3 scale, float mod, c
 	// dnorm_dq = {d(norm)/dr, d(norm)/dx, d(norm)/dy, d(norm)/dz}
 	switch (minIndex)
 	{
-		case 1:
+		case 0:
 			// Case 1 -> norm = {1.f - 2.f * (y * y + z * z), 2.f * (x * y + r * z), 2.f * (x * z - r * y)}
-			dnorm_dr = {0.0f, -2.0f * z, 2.0f * y};
+			dnorm_dr = {0.0f, 2.0f * z, -2.0f * y};
 			dnorm_dx = {0.0f, 2.0f * y, 2.0f * z};
 			dnorm_dy = {-4.0f * y, 2.0f * x, -2.0f * r};
 			dnorm_dz = {-4.0f * z, 2.0f * r, 2.0f * x};
 			
 			break;
 		
-		case 2:
+		case 1:
 			// Case 2 -> norm = {2.f * (x * y - r * z), 1.f - 2.f * (x * x + z * z), 2.f * (y * z + r * x)}
 			dnorm_dr = {-2.0f * z, 0.0f, 2.0f * x};
 			dnorm_dx = {2.0f * y, -4.0f * x, 2.0f * r};
@@ -87,7 +87,7 @@ __device__ void computeNormBackward(int idx, const glm::vec3 scale, float mod, c
 
 			break;
 
-		case 3:
+		case 2:
 			// Case 3 -> norm = {2.f * (x * z + r * y), 2.f * (y * z - r * x), 1.f - 2.f * (x * x + y * y)}
 			dnorm_dr = {2.0f * y, -2.0f * x, 0.0f};
 			dnorm_dx = {2.0f * z, -2.0f * r, -4.0f * x};

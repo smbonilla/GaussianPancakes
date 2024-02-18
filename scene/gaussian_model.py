@@ -26,6 +26,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import pickle
+from gaussian_norms import compute_gauss_norm
 
 class GaussianModel:
 
@@ -37,19 +38,28 @@ class GaussianModel:
             return symm
         
         def return_surface_normal(scaling, scaling_modifier, rotation):
+
+            input_rotation_normalized = rotation / rotation.norm(p=2, dim=1, keepdim=True)
+
+            # cuda_time = time.time()
+            cuda_normal = compute_gauss_norm(scaling, input_rotation_normalized, scaling_modifier)
+            # print("CUDA time: ", time.time() - cuda_time)
             
-            R = build_rotation(rotation)
+            # pytorch_time = time.time()
+            # R = build_rotation(rotation)
 
-            # Directly select the unit vector for the minimum scale direction
-            _, min_index = torch.min(scaling * scaling_modifier, dim=1)
-            unit_vectors = torch.eye(3, device=rotation.device)  # Create a 3x3 identity matrix as basis vectors
-            selected_vectors = unit_vectors[min_index]  # Select the basis vector corresponding to the minimum scale axis
+            # # Directly select the unit vector for the minimum scale direction
+            # _, min_index = torch.min(scaling * scaling_modifier, dim=1)
+            # unit_vectors = torch.eye(3, device=rotation.device)  # Create a 3x3 identity matrix as basis vectors
+            # selected_vectors = unit_vectors[min_index]  # Select the basis vector corresponding to the minimum scale axis
 
-            # Apply rotation to the selected vectors
-            # Since R is batched and selected_vectors are individual vectors, we need to ensure proper broadcasting
-            surface_normal = torch.einsum('bij,bj->bi', R, selected_vectors)
+            # # Apply rotation to the selected vectors
+            # # Since R is batched and selected_vectors are individual vectors, we need to ensure proper broadcasting
+            # surface_normal = torch.einsum('bij,bj->bi', R, selected_vectors)
+            # print("PyTorch time: ", time.time() - pytorch_time)
 
-            return surface_normal
+            # return surface_normal
+            return cuda_normal
         
         self.scaling_activation = torch.exp
         self.scaling_inverse_activation = torch.log

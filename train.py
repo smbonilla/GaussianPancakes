@@ -26,6 +26,7 @@ from gaussian_renderer import render, network_gui
 import sys
 import warnings
 # delete me
+import time
 from pytorch_msssim import ms_ssim
 from scene import Scene, GaussianModel
 from utils.general_utils import safe_state, cdist
