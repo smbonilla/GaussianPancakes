@@ -27,6 +27,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import pickle
 from gaussian_norms import compute_gauss_norm
+import faiss
+import faiss.contrib.torch_utils
 
 class GaussianModel:
 
@@ -38,27 +40,8 @@ class GaussianModel:
             return symm
         
         def return_surface_normal(scaling, scaling_modifier, rotation):
-
             input_rotation_normalized = rotation / rotation.norm(p=2, dim=1, keepdim=True)
-
-            # cuda_time = time.time()
             cuda_normal = compute_gauss_norm(scaling, input_rotation_normalized, scaling_modifier)
-            # print("CUDA time: ", time.time() - cuda_time)
-            
-            # pytorch_time = time.time()
-            # R = build_rotation(rotation)
-
-            # # Directly select the unit vector for the minimum scale direction
-            # _, min_index = torch.min(scaling * scaling_modifier, dim=1)
-            # unit_vectors = torch.eye(3, device=rotation.device)  # Create a 3x3 identity matrix as basis vectors
-            # selected_vectors = unit_vectors[min_index]  # Select the basis vector corresponding to the minimum scale axis
-
-            # # Apply rotation to the selected vectors
-            # # Since R is batched and selected_vectors are individual vectors, we need to ensure proper broadcasting
-            # surface_normal = torch.einsum('bij,bj->bi', R, selected_vectors)
-            # print("PyTorch time: ", time.time() - pytorch_time)
-
-            # return surface_normal
             return cuda_normal
         
         self.scaling_activation = torch.exp
@@ -90,6 +73,10 @@ class GaussianModel:
         self.percent_dense = 0
         self.spatial_lr_scale = 0
         self.setup_functions()
+
+        self.closest_point_indices = torch.empty(0, dtype=torch.long)
+        self.original_normals = torch.empty(0)
+        self.faiss_index = None
 
     def capture(self):
         return (
@@ -147,6 +134,14 @@ class GaussianModel:
     def get_opacity(self):
         return self.opacity_activation(self._opacity)
     
+    @property
+    def get_closest_point_indices(self):
+        return self.closest_point_indices
+
+    @property
+    def get_original_normals(self):
+        return self.original_normals
+    
     def get_covariance(self, scaling_modifier = 1):
         return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)
     
@@ -156,6 +151,12 @@ class GaussianModel:
     def oneupSHdegree(self):
         if self.active_sh_degree < self.max_sh_degree:
             self.active_sh_degree += 1
+    
+    def find_closest_indices(self, points): 
+        if self.faiss_index is None:
+            raise ValueError("faiss index not initialized")
+        _, closest_indices = self.faiss_index.search(points.contiguous(), 1)
+        return closest_indices.squeeze()
 
     def create_from_pcd(self, pcd : BasicPointCloud, spatial_lr_scale : float):
         self.spatial_lr_scale = spatial_lr_scale
@@ -166,7 +167,7 @@ class GaussianModel:
         features[:, 3:, 1:] = 0.0
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
-
+        
         dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001) # find mean dist to nearest 3 neighbors
         scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 3)
         rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
@@ -181,6 +182,9 @@ class GaussianModel:
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
+
+        self.original_normals = self.compute_point_cloud_normals(k=10, plotting=False)
+        self.closest_point_indices = self.find_closest_indices(self.get_xyz)
 
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
@@ -294,6 +298,9 @@ class GaussianModel:
 
         self.active_sh_degree = self.max_sh_degree
 
+        self.original_normals = self.compute_point_cloud_normals(k=10, plotting=False)
+        self.closest_point_indices = self.find_closest_indices(self.get_xyz)
+
     def replace_tensor_to_optimizer(self, tensor, name):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
@@ -343,6 +350,8 @@ class GaussianModel:
         self.denom = self.denom[valid_points_mask]
         self.max_radii2D = self.max_radii2D[valid_points_mask]
 
+        self.closest_point_indices = self.closest_point_indices[valid_points_mask]
+
     def cat_tensors_to_optimizer(self, tensors_dict):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
@@ -385,6 +394,15 @@ class GaussianModel:
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
+        new_closest_point_indices = self.find_closest_indices(new_xyz)
+        if new_closest_point_indices.ndim == 0:
+            if self.faiss_index is None:
+                raise ValueError("faiss index not initialized")
+            else:
+                self.closest_point_indices = torch.cat((self.closest_point_indices, new_closest_point_indices.unsqueeze(dim=0)), dim=0)
+        else:
+            self.closest_point_indices = torch.cat((self.closest_point_indices, new_closest_point_indices), dim=0)
+
     def densify_and_split(self, grads, grad_threshold, scene_extent, N=2):
         n_init_points = self.get_xyz.shape[0]
         # Extract points that satisfy the gradient condition
@@ -395,7 +413,7 @@ class GaussianModel:
                                               torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent)
 
         # limit how much it moves away possibly? or instead limit the size of gaussians
-        stds = self.get_scaling[selected_pts_mask].repeat(N,1)*0.1
+        stds = self.get_scaling[selected_pts_mask].repeat(N,1) *0.1
         means =torch.zeros((stds.size(0), 3),device="cuda") 
         samples = torch.normal(mean=means, std=stds) 
         rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N,1,1)
@@ -512,19 +530,10 @@ class GaussianModel:
         end = time.time()
         print("Finished computing normals in {} seconds.".format(end-start))
 
-        if plotting:
-            # Assuming 'xyz' and 'normals' are your data
-            plot_data = {
-                'xyz': xyz.cpu().detach().numpy(),
-                'normals': all_normals.cpu().detach().numpy()
-            }
-            # plot and save as png file
-            fig = plt.figure()
-            ax = fig.add_subplot(111, projection='3d')
-            ax.scatter(plot_data['xyz'][:,0], plot_data['xyz'][:,1], plot_data['xyz'][:,2], c='r', marker='o')
-            ax.quiver(plot_data['xyz'][:,0], plot_data['xyz'][:,1], plot_data['xyz'][:,2], plot_data['normals'][:,0], plot_data['normals'][:,1], plot_data['normals'][:,2], length=0.1, normalize=True)
-            ax.view_init(0, -45)
-            plt.savefig('my_figure.png')
-            #with open('my_figure.pickle', 'wb') as f:
-            #    pickle.dump(plot_data, f)
+        # initialize faiss index
+        res = faiss.StandardGpuResources()
+        self.faiss_index = faiss.GpuIndexFlatL2(res, 3)
+        normals = all_normals[:, :3].detach().contiguous()
+        self.faiss_index.add(normals)
+        
         return all_normals
