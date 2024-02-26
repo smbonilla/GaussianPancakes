@@ -38,6 +38,7 @@ class Camera(nn.Module):
 
         self.original_image = image.clamp(0.0, 1.0).to(self.data_device)
         self.original_depth = depth.to(self.data_device)
+        self.original_depth = (self.original_depth - self.original_depth.min()) / (self.original_depth.max() - self.original_depth.min())
         self.image_width = self.original_image.shape[2]
         self.image_height = self.original_image.shape[1]
 

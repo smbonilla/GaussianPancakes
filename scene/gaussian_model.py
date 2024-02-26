@@ -298,8 +298,9 @@ class GaussianModel:
 
         self.active_sh_degree = self.max_sh_degree
 
-        self.original_normals = self.compute_point_cloud_normals(k=10, plotting=False)
-        self.closest_point_indices = self.find_closest_indices(self.get_xyz)
+        # self.original_normals = self.compute_point_cloud_normals(k=10, plotting=False)
+        # points = torch.tensor(xyz, dtype=torch.float, device="cuda")
+        # self.closest_point_indices = self.find_closest_indices(points)
 
     def replace_tensor_to_optimizer(self, tensor, name):
         optimizable_tensors = {}

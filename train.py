@@ -127,6 +127,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gt_image = viewpoint_cam.original_image.cuda() 
         gt_depth = viewpoint_cam.original_depth.cuda()
 
+        # depth should always be normalized to 0 to 1
+        depth = (depth - depth.min()) / (depth.max() - depth.min())
+
         L1_images = l1_loss(image, gt_image)
 
         L_depths = F.huber_loss(depth, gt_depth, delta=0.2) 
