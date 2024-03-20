@@ -1,1 +1,1 @@
-# GaussianPancakes
+# Gaussian Pancakes
