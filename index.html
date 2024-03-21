@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="description"
+        content="Gaussian Pancakes:  Geometrically-Regularized 3D Gaussian Splatting for Realistic Endoscopic Reconstruction.">
+  <meta name="keywords" content="Gaussian Splatting">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gaussian Pancakes :pancakes:: Geometrically-Regularized 3D Gaussian Splatting for Realistic Endoscopic Reconstruction </title>
+
+  <!-- Global site tag (gtag.js) - Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-PYVRSFMDRL"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+
+    function gtag() {
+      dataLayer.push(arguments);
+    }
+
+    gtag('js', new Date());
+
+    gtag('config', 'G-PYVRSFMDRL');
+  </script>
+
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+        rel="stylesheet">
+
+  <link rel="stylesheet" href="./static/css/bulma.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="./static/css/fontawesome.all.min.css">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="./static/css/index.css">
+  <!-- <link rel="icon" href="./static/images/favicon.svg"> -->
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script defer src="./static/js/fontawesome.all.min.js"></script>
+  <script src="./static/js/bulma-carousel.min.js"></script>
+  <script src="./static/js/bulma-slider.min.js"></script>
+  <script src="./static/js/index.js"></script>
+
+  <style>
+        .video-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .video-container video {
+            margin-right: 10px;
+        }
+    </style>
+  
+</head>
+<body>
+
+<section class="hero">
+  <div class="hero-body">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered">
+        <div class="column has-text-centered">
+          <h1 class="title is-2 publication-title">Gaussian Pancakes 🥞: <br>Geometrically-Regularized 3D Gaussian Splatting for Realistic Endoscopic Reconstruction </h1>
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">
+              <a href="https://sierrabonilla.com/">Sierra Bonilla*</a>,</span>
+            <span class="author-block">
+              <a href="https://scholar.google.co.uk/citations?user=F2Q8SKIAAAAJ&hl=e">Shuai Zhang*</a>,</span>
+            <span class="author-block">
+              <a href="https://scholar.google.com/citations?user=cmwf1WwAAAAJ&hl=en">Dimitris Psychogyios</a>,</span>
+            <span class="author-block">
+              <a href="https://scholar.google.co.uk/citations?user=pGfEK6UAAAAJ&hl=en">Danail Stoyanov</a>,</span>
+            <span class="author-block">
+                <a href="https://scholar.google.co.uk/citations?user=hCMO0ycAAAAJ&hl=en">Francisco Vasconcelos</a>,</span>
+            <span class="author-block">
+            <a href="https://sophiabano.github.io/">Sophia Bano</a>
+            </span>
+          </div>
+
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">University College London</span>
+          </div>
+
+          <div class="column has-text-centered">
+            <div class="publication-links">
+
+              <span class="link-block">
+                <a href="https://arxiv.org/"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="ai ai-arxiv"></i>
+                  </span>
+                  <span>arXiv</span>
+                </a>
+              </span>
+
+              <!-- Video Link. -->
+              <span class="link-block">
+                <a href="TBD"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fab fa-youtube"></i>
+                  </span>
+                  <span>Video</span>
+                </a>
+              </span>
+
+              <!-- Code Link. -->
+              <span class="link-block">
+                <a href="https://github.com/smbonilla/GaussianPancakes"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fab fa-github"></i>
+                  </span>
+                  <span>Code</span>
+                  </a>
+              </span>
+
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="hero teaser">
+  <div class="container is-max-desktop">
+    <div class="hero-body">
+
+      <h2 class="subtitle has-text-centered">
+        <p>
+<<<<<<< Updated upstream
+        <span class="dnerf">Gaussian Pancakes</span> 
+        reconstructs surgical scene under real-time rendering efficacy (195 FPS real-time, 100x gain), better rendering quality
+        (35+ PSNR), and less training overhead (within 2 min/scene).
+=======
+        <span><b>Gaussian Pancakes</b></span> 
+        reconstructs 
+>>>>>>> Stashed changes
+        </p>
+
+      </h2>
+    </div>
+  </div>
+</section>
+
+
+<section class="hero is-light is-small">
+  <div class="hero-body">
+    <div class="video-container">
+        <video width="320" height="240" controls autoplay muted>
+            <source src="pulling_gt.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+        <video width="320" height="240" controls autoplay muted>
+            <source src="pulling_ours.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+        <video width="320" height="240" controls autoplay muted>
+            <source src="cutting_gt.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+        <video width="320" height="240" controls autoplay muted>
+            <source src="cutting_ours.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+    </div>
+      
+  </div>
+  <h2 class="subtitle has-text-centered">
+    <p>
+<<<<<<< Updated upstream
+      The ground truth and the corresponding reconstruction by our method for the "pulling" and "cutting" clips.
+=======
+      Caption for videos.
+>>>>>>> Stashed changes
+      </p>
+  </h2>
+</section>
+
+
+
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <!-- Abstract. -->
+    <div class="columns is-centered has-text-centered">
+      
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Abstract</h2>
+        <div class="content has-text-justified">
+          <p>
+<<<<<<< Updated upstream
+          Reconstructing deformable tissues from endoscopic stereo videos is essential in many downstream surgical applications. However, existing methods suffer from slow inference speed, which greatly limits their practical use. 
+        </p>
+        <p>
+          In this paper, we introduce EndoGaussian, a real-time surgical scene reconstruction framework that builds on 3D Gaussian Splatting. Our framework represents dynamic surgical scenes as canonical Gaussians and a time-dependent deformation field, which predicts Gaussian deformations at novel timestamps. Due to the efficient Gaussian representation and parallel rendering pipeline, our framework significantly accelerates the rendering speed compared to previous methods. In addition, we design the deformation field as the combination of a lightweight encoding voxel and an extremely tiny MLP, allowing for efficient Gaussian tracking with a minor rendering burden. Furthermore, we design a holistic Gaussian initialization method to fully leverage the surface distribution prior, achieved by searching informative points from across the input image sequence.
+        </p>
+        <p>
+          Experiments on public endoscope datasets demonstrate that our method can achieve real-time rendering speed (195 FPS real-time, 100x gain) while maintaining the state-of-the-art reconstruction quality (35.925 PSNR) and the fastest training speed (within 2 min/scene), showing significant promise for intraoperative surgery applications. 
+        </p>
+
+
+=======
+            Within colorectal cancer diagnostics, conventional colonoscopy techniques face critical limitations, including a limited field of view and a lack of depth information, which can impede the detection of pre-cancerous lesions. Current methods struggle to provide comprehensive and accurate 3D reconstructions of the colonic surface which can help minimize the missing regions and reinspection for pre-cancerous polyps. Addressing this, we introduce “Gaussian Pancakes”, a method that leverages 3D Gaussian Splatting (3D GS) combined with a Recurrent Neural Network-based Simultaneous Localization and Mapping (RNNSLAM) system. By introducing geometric and depth regularization into the 3D GS framework, our approach ensures more accurate alignment of Gaussians with the colon surface, resulting in smoother 3D reconstructions with novel viewing of detailed textures and structures. Evaluations across three diverse datasets show that Gaussian Pancakes enhances novel view synthesis quality, surpassing current leading methods with a 18% boost in PSNR and a 16% improvement in SSIM. It also delivers over 100× faster rendering and more than 10× shorter training times, making it a practical tool for real-time applications. Hence, this holds promise for achieving clinical translation for better detection and diagnosis of colorectal cancer. 
+          </p>
+>>>>>>> Stashed changes
+        </div>
+      </div>
+    </div>
+
+
+<section class="section">
+  <div class="container is-max-desktop">
+
+
+
+      <!-- Re-rendering. -->
+      <h3 class="title is-3">How EndoGaussian facilitate real-time intraoperative application?</h3>
+
+      <img src="introduction_new.png" alt="xxxx">
+
+      <div class="content has-text-justified">
+        <p>
+          Using <span class="dnerf">EndoGaussian</span>, you can perform deformable surgical scene reconstruction with nearly 200 FPS, 35+ PSNR.
+        </p>
+      </div>
+
+    <!-- Animation. -->
+    <div class="columns is-centered">
+      <div class="column is-full-width">
+        <h3 class="title is-3">Method Overview</h3>
+
+        <!-- Interpolating. -->
+        <!-- <h3 class="title is-4">Interpolating states</h3> -->
+        <img src="framework_new.png" alt="xxxx">
+        <div class="content has-text-justified">
+        
+        <p>
+          <!-- We can also animate the scene by interpolating the deformation latent codes of two input
+          frames. Use the slider here to linearly interpolate between the left frame and the right
+          frame. -->
+          llustration of the proposed EndoGaussian framework, which consists of a) Holistic Gaussian Initialization, b) Voxel-based Gaussian Tracking, and c) Optimization.
+        </p>
+        
+        </div>
+
+      </div>
+    </div>
+    <!--/ Animation. -->
+
+  <h3 class="title is-3">Visual Results</h3>
+
+  <img src="comparison_new.png" alt="xxxx">
+
+  <div class="content has-text-justified">
+    <p>
+      <!-- Using <span class="dnerf">Nerfies</span>, you can re-render a video from a novel
+      viewpoint such as a stabilized camera by playing back the training deformations. -->
+      Display of rendered results of our EndoGaussian against prior SOTA methods on surgical scene reconstruction. The rendering FPS, training time cost and image quality in PSNR is provided.
+
+    </p>
+  </div>
+
+</div>
+</div>
+
+</section>
+
+
+<section class="section" id="BibTeX">
+  <div class="container is-max-desktop content">
+    <h2 class="title">BibTeX</h2>
+    <pre><code>@article{liu2024endoG,
+  author    = {Liu, Yifan and Li, Chenxin and Yang, Chen and Yuan Yixuan},
+  title     = {EndoGaussian: Gaussian Splatting for Deformable Surgical Scene Reconstruction},
+  journal   = {Arxiv},
+  year      = {2024},
+}</code></pre>
+  </div>
+</section>
+
+
+<footer class="footer">
+  <div class="container">
+    <div class="content has-text-centered">
+          <p>
+            Website template is borrowed from <a
+              href="https://github.com/nerfies/nerfies.github.io">here</a> 
+              <!-- of this website,
+            we just ask that you link back to this page in the footer.
+            Please remember to remove the analytics code included in the header of the website which
+            you do not want on your website. -->
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
