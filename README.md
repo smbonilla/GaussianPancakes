@@ -1,6 +1,6 @@
 # Gaussian Pancakes 🥞
 
-### [Project Page]() | [Paper]() 
+### [Project Page](https://smbonilla.github.io/GaussianPancakes/) | [Paper](https://arxiv.org/) 
 
 > [Gaussian Pancakes: Geometrically-Regularized 3D Gaussian Splatting for Realistic Endoscopic Reconstruction](https://arxiv.org/)  
 > Sierra Bonilla, Shuai Zhang, Dimitris Psychogyios, Danail Stoyanov, Francisco Vasconcelos, Sophia Bano
