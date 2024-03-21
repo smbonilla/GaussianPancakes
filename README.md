@@ -10,5 +10,14 @@
 </p>
 
 ### Pipeline
-![pipeline](images/Method_lightmode.png#gh-light-mode-only)
-![pipeline](images/Method_darkmode.png#gh-dark-mode-only)
+<!-- ![pipeline](images/Method_lightmode.png#gh-light-mode-only)
+![pipeline](images/Method_darkmode.png#gh-dark-mode-only) -->
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/Method_darkmode.png">
+  <source media="(prefers-color-scheme: light)" srcset="images/Method_lightmode.png">
+  <img alt="pipeline." src="images/Method_lightmode.png">
+</picture>
+
+### Update
+* 21/03/2024 - Code: coming soon.
