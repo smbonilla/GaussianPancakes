@@ -9,7 +9,7 @@
   <title>Gaussian Pancakes</title>
 
   <!-- Global site tag (gtag.js) - Google Analytics -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-PYVRSFMDRL"></script>
+  <!-- <script async src="https://www.googletagmanager.com/gtag/js?id=G-PYVRSFMDRL"></script> -->
   <script>
     window.dataLayer = window.dataLayer || [];
 
@@ -48,7 +48,7 @@
         }
         
         .video-container video {
-            margin-right: 10px;
+            max-width: 800px;
         }
     </style>
   
@@ -144,7 +144,8 @@
 <section class="hero is-light is-small">
   <div class="hero-body">
     <div class="video-container">
-        <video autoplay loop muted>
+      
+        <video width="100%" autoplay loop muted>
             <source src="images/example.mp4" type="video/mp4">
             Your browser does not support the video tag.
         </video>
@@ -165,7 +166,7 @@
   </div>
   <h2 class="subtitle has-text-centered">
     <p>
-      Caption for videos.
+      3D Gaussian Splatting (3D GS) vs. Gaussian Pancakes on the 
       </p>
   </h2>
 </section>
