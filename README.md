@@ -6,7 +6,7 @@
 > Sierra Bonilla, Shuai Zhang, Dimitris Psychogyios, Danail Stoyanov, Francisco Vasconcelos, Sophia Bano
 
 <p align="center">
-  <img src="images/example.gif" alt="Alt text for your GIF">
+  <img src="images/example2.gif" alt="Alt text for your GIF">
 </p>
 
 ### Pipeline
