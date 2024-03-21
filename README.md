@@ -8,7 +8,12 @@
 <!-- <video src="images/example.mp4" controls loop>
   Your browser does not support the video tag.
 </video> -->
-![Example](images/example.gif)
+<div align="center">
+  ![Example](images/example.gif)
+</div>
+<p align="center">
+  <img src="images/example.gif" alt="Alt text for your GIF">
+</p>
 
 ### Pipeline
 ![pipeline](images/Method_lightmode.png#gh-light-mode-only)
