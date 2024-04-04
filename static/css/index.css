@@ -125,6 +125,15 @@ body {
 
 .results-carousel video {
   margin: 0;
+  /* height: 25vh;  */
+  /* object-fit: cover; */ 
+}
+
+/* Adjust for smaller screens */
+@media (max-width: 500px) {
+  .results-carousel video {
+    height: 30vh; /* Larger percentage of viewport height on small screens */
+  }
 }
 
 

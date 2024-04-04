@@ -125,20 +125,20 @@
   </div>
 </section>
 
-<section class="hero teaser">
+<!-- <section class="hero teaser">
   <div class="container is-max-desktop">
     <div class="hero-body">
 
       <h2 class="subtitle has-text-centered">
         <p>
-        <span class="dnerf">Gaussian Pancakes</span> 
+        <span class="dnerf">Gaussian Pancakes</span> creates smoother 3D Gaussian Splats efficiently
         
         </p>
 
       </h2>
     </div>
   </div>
-</section>
+</section> -->
 
 
 <section class="hero is-light is-small">
@@ -166,7 +166,7 @@
   </div>
   <h2 class="subtitle has-text-centered">
     <p>
-      3D Gaussian Splatting (3D GS) vs. Gaussian Pancakes on the 
+      3D Gaussian Splatting vs. Gaussian Pancakes 
       </p>
   </h2>
 </section>
@@ -223,18 +223,56 @@
     </div>
     <!--/ Animation. -->
 
-  <h3 class="title is-3">Visual Comparison</h3>
+  <h3 class="title is-3">Visual Results</h3>
 
-  <img src="comparison_new.png" alt="xxxx">
+  <section class="hero is-light is-small">
+    <div class="hero-body">
+      <div class="container">
+        <div id="results-carousel" class="carousel results-carousel">
+          <div class="item item-steve">
+            <video poster="" id="steve" autoplay controls muted loop playsinline>
+              <source src="./images/carousel_assets/cecum.mp4"
+                      type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-chair-tp">
+            <video poster="" id="chair-tp" autoplay controls muted loop playsinline>
+              <source src="./images/carousel_assets/rect.mp4"
+                      type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-shiba">
+            <video poster="" id="shiba" autoplay controls muted loop playsinline>
+              <source src="./images/carousel_assets/c3v4.mp4"
+                      type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-fullbody">
+            <video poster="" id="fullbody" autoplay controls muted loop playsinline>
+              <source src="./images/carousel_assets/invivo55.mp4"
+                      type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-blueshirt">
+            <video poster="" id="blueshirt" autoplay controls muted loop playsinline>
+              <source src="./images/carousel_assets/invivo57.mp4"
+                      type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-mask">
+            <video poster="" id="mask" autoplay controls muted loop playsinline>
+              <source src="./images/carousel_assets/invivo35.mp4"
+                      type="video/mp4">
+            </video>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  <div class="content has-text-justified">
-    <p>
-      
-      xxx
-
-    </p>
-  </div>
-
+  <video controls autoplay muted>
+    <source src="images/visual-comp.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
 
   <h3 class="title is-3">Contributions</h3>
 
