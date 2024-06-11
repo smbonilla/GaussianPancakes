@@ -22,6 +22,12 @@ from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser
 
+def rescale_image(img, new_min=0, new_max=255):
+    old_min, old_max = img.getextrema()
+    scale = (new_max - new_min) / (old_max - old_min)
+    result_img = img.point(lambda i: (i - old_min) * scale + new_min)
+    return result_img
+
 def normalize_tensor_to_range(tensor, target_min, target_max):
     current_min = tensor.min()
     current_max = tensor.max()
@@ -52,10 +58,16 @@ def readDepths(renders_dir, gt_dir):
         if fname.endswith("_depth.png"): 
             render = Image.open(renders_dir / fname).convert("L")
             gt = Image.open(gt_dir / fname).convert("L")
+
+            # ---- testing next two line ----
+            # make sure both are between 0-255
+            render = rescale_image(render)
+            #gt = rescale_image(gt)
+
             render_tensor = tf.to_tensor(render)
             gt_tensor = tf.to_tensor(gt)
-            render_tensor = normalize_tensor_to_range(render_tensor, 0, 1)
-            gt_tensor = (gt_tensor)
+            # render_tensor = normalize_tensor_to_range(render_tensor, 0, 1)
+            
             renders.append(render_tensor.unsqueeze(0).cuda())
             gts.append(gt_tensor.unsqueeze(0).cuda())
             image_names.append(fname)
@@ -96,12 +108,14 @@ def evaluate(model_paths, train_times):
                 depths, gt_depths, depth_image_names = readDepths(renders_dir, gt_dir)
 
                 depths_mse = []
+                depths_ssim = []
 
                 # save one depth and one gt depth to png and then break
                 for i in range(len(depths)):
                     depth = depths[i]
                     gt_depth = gt_depths[i]
                     depths_mse.append(torch.mean((depth - gt_depth) ** 2).item())
+                    depths_ssim.append(ssim(depth, gt_depth).item())
 
                 ssims = []
                 msssims = []
@@ -121,12 +135,14 @@ def evaluate(model_paths, train_times):
                 PSNR_avg, PSNR_std = torch.tensor(psnrs).mean(), torch.tensor(psnrs).std()
                 LPIPS_avg, LPIPS_std = torch.tensor(lpipss).mean(), torch.tensor(lpipss).std()
                 DepthMSE_avg, DepthMSE_std = torch.tensor(depths_mse).mean(), torch.tensor(depths_mse).std()
+                DepthSSIM_avg, DepthSSIM_std = torch.tensor(depths_ssim).mean(), torch.tensor(depths_ssim).std()    
 
                 print("  SSIM : {:>12.7f}".format(SSIM_avg, ".5"))
                 print("  MS-SSIM : {:>12.7f}".format(MS_SSIM_avg, ".5"))
                 print("  PSNR : {:>12.7f}".format(PSNR_avg, ".5"))
                 print("  LPIPS: {:>12.7f}".format(LPIPS_avg, ".5"))
                 print("  Depth MSE: {:>12.7f}".format(DepthMSE_avg, ".5"))
+                print("  Depth SSIM: {:>12.7f}".format(DepthSSIM_avg, ".5"))
 
                 # if train_times is not an empty list, add the training time to the dictionary
                 if train_times:
@@ -140,6 +156,8 @@ def evaluate(model_paths, train_times):
                                                         "LPIPS_std": LPIPS_std.item(),
                                                         "DepthMSE": DepthMSE_avg.item(),
                                                         "DepthMSE_std": DepthMSE_std.item(),
+                                                        "DepthSSIM": DepthSSIM_avg.item(),
+                                                        "DepthSSIM_std": DepthSSIM_std.item(),
                                                         "NumSamples": num_samples,
                                                         "TrainTime": train_times[model_paths.index(scene_dir)]})
                 else:
@@ -153,12 +171,15 @@ def evaluate(model_paths, train_times):
                                                             "LPIPS_std": LPIPS_std.item(),
                                                             "DepthMSE": DepthMSE_avg.item(),
                                                             "DepthMSE_std": DepthMSE_std.item(),
+                                                            "DepthSSIM": DepthSSIM_avg.item(),
+                                                            "DepthSSIM_std": DepthSSIM_std.item(),
                                                             "NumSamples": num_samples})
                 per_view_dict[scene_dir][method].update({"SSIM": {name: ssim for ssim, name in zip(torch.tensor(ssims).tolist(), image_names)},
                                                         "MS-SSIM": {name: msssim for msssim, name in zip(torch.tensor(msssims).tolist(), image_names)},
                                                             "PSNR": {name: psnr for psnr, name in zip(torch.tensor(psnrs).tolist(), image_names)},
                                                             "LPIPS": {name: lp for lp, name in zip(torch.tensor(lpipss).tolist(), image_names)},
                                                             "DepthMSE": {name: mse for mse, name in zip(torch.tensor(depths_mse).tolist(), depth_image_names)},
+                                                            "DepthSSIM": {name: ssim for ssim, name in zip(torch.tensor(depths_ssim).tolist(), depth_image_names)},
                                                             "NumSamples": num_samples})
 
             with open(scene_dir + "/results.json", 'w') as fp:

@@ -127,15 +127,32 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gt_image = viewpoint_cam.original_image.cuda() 
         gt_depth = viewpoint_cam.original_depth.cuda()
 
-        # depth should always be normalized to 0 to 1
-        depth = (depth - depth.min()) / (depth.max() - depth.min())
-
         L1_images = l1_loss(image, gt_image)
 
         L_depths = F.huber_loss(depth, gt_depth, delta=0.2) 
 
         loss = (1.0 - opt.lambda_dssim) * L1_images + opt.lambda_depth * L_depths 
         psnr_ = psnr(image, gt_image).mean().double()
+
+        # if iteration == 1 or 3000 save the images (depth and render)
+        if iteration == 1 or iteration == 2:
+            # Convert and save images.
+            def save_image(tensor, filename):
+                # Ensure tensor is in CPU memory and convert to numpy.
+                array = tensor.detach().cpu().numpy()
+                # Handle single-channel (depth) images correctly by squeezing the channel dimension.
+                if array.shape[0] == 1:  # Assuming channel-first format.
+                    array = np.squeeze(array, axis=0)
+                else:
+                    array = array.transpose(1, 2, 0)  # Convert from CHW to HWC for RGB images.
+                array = (array * 255).astype(np.uint8)
+                Image.fromarray(array).save(os.path.join(dataset.source_path, filename))
+            
+            # Save images.
+            save_image(image, "render_" + str(iteration) + ".png")
+            save_image(gt_image, "gt_" + str(iteration) + ".png")
+            save_image(depth, "depth_" + str(iteration) + ".png")
+            save_image(gt_depth, "gt_depth_" + str(iteration) + ".png")
 
         if opt.lambda_dssim != 0:
             L_dssim = 1.0 - ssim(image, gt_image)
@@ -279,8 +296,8 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[3_000, 7_000, 10_000])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[3_000, 7_000, 10_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 15_000, 30_000])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 15_000, 30_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)

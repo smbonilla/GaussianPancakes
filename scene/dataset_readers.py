@@ -327,16 +327,9 @@ def readRNNSIMSceneInfo(path, images, depths, eval, llffhold=8):
                            ply_path=ply_path)
     return scene_info
 
-def readRNNC3VDSceneInfo(path, images, depths, eval, llffhold=8):
-    return None
-
-def readRNNVIVOSceneInfo(path, images, depths, eval, llffhold=8):
-    return None
 
 sceneLoadTypeCallbacks = {
     "Colmap": readColmapSceneInfo,
     "Blender" : readNerfSyntheticInfo, 
     "RNNSIM" : readRNNSIMSceneInfo,
-    "RNNC3VD": readRNNC3VDSceneInfo,
-    "RNNVIVO": readRNNVIVOSceneInfo
 }

@@ -3,10 +3,10 @@
 
 # make sure to have activated the virtual environment
 
-pip show gaussian-norms &> /dev/null
+pip show diff-gaussian-rasterization &> /dev/null
 if [ $? -eq 0 ]; then
-    echo "Uninstalling existing gaussian-norms package..."
-    pip uninstall gaussian-norms -y
+    echo "Uninstalling existing depth-diff-gaussian-rasterization package..."
+    pip uninstall diff-gaussian-rasterization -y
 fi
 
 # Navigate to the directory of this script

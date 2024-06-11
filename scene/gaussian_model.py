@@ -22,7 +22,6 @@ from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation, cdist, build_rotation
 import time
 from tqdm import tqdm 
-# delete me if u wanna 
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import pickle
@@ -77,6 +76,7 @@ class GaussianModel:
         self.closest_point_indices = torch.empty(0, dtype=torch.long)
         self.original_normals = torch.empty(0)
         self.faiss_index = None
+        self.lambda_norm = None
 
     def capture(self):
         return (
@@ -111,6 +111,7 @@ class GaussianModel:
         self.xyz_gradient_accum = xyz_gradient_accum
         self.denom = denom
         self.optimizer.load_state_dict(opt_dict)
+        self.lambda_norm = training_args.lambda_norm
 
     @property
     def get_scaling(self):
@@ -183,8 +184,10 @@ class GaussianModel:
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
-        self.original_normals = self.compute_point_cloud_normals(k=10, plotting=False)
+        self.original_normals = self.compute_point_cloud_normals(k=10, plotting=False, create_faiss_index=True)
         self.closest_point_indices = self.find_closest_indices(self.get_xyz)
+
+        print("Finished creating Gaussian model from point cloud.")
 
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
@@ -205,6 +208,8 @@ class GaussianModel:
                                                     lr_final=training_args.position_lr_final*self.spatial_lr_scale,
                                                     lr_delay_mult=training_args.position_lr_delay_mult,
                                                     max_steps=training_args.position_lr_max_steps)
+
+        self.lambda_norm = training_args.lambda_norm
 
     def update_learning_rate(self, iteration):
         ''' Learning rate scheduling per step '''
@@ -413,8 +418,10 @@ class GaussianModel:
         selected_pts_mask = torch.logical_and(selected_pts_mask,
                                               torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent)
 
-        # limit how much it moves away possibly? or instead limit the size of gaussians
-        stds = self.get_scaling[selected_pts_mask].repeat(N,1) *0.1
+        if self.lambda_norm != 0:
+            stds = self.get_scaling[selected_pts_mask].repeat(N,1)*0.1 # limit movement so normals are valid 
+        else:
+            stds = self.get_scaling[selected_pts_mask].repeat(N,1)
         means =torch.zeros((stds.size(0), 3),device="cuda") 
         samples = torch.normal(mean=means, std=stds) 
         rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N,1,1)
@@ -473,7 +480,7 @@ class GaussianModel:
         normals_normalized = torch.cat((self.get_xyz, normal_mat_normalized), dim=1) 
         return normals_normalized
 
-    def compute_point_cloud_normals(self, k=10, plotting=False):
+    def compute_point_cloud_normals(self, k=10, plotting=False, create_faiss_index=True):
         """
         Compute normal vectors for each point in the point cloud using PCA on the neighborhood.
 
@@ -531,10 +538,11 @@ class GaussianModel:
         end = time.time()
         print("Finished computing normals in {} seconds.".format(end-start))
 
-        # initialize faiss index
-        res = faiss.StandardGpuResources()
-        self.faiss_index = faiss.GpuIndexFlatL2(res, 3)
-        normals = all_normals[:, :3].detach().contiguous()
-        self.faiss_index.add(normals)
+        if create_faiss_index:
+            # initialize faiss index
+            res = faiss.StandardGpuResources()
+            self.faiss_index = faiss.GpuIndexFlatL2(res, 3)
+            normals = all_normals[:, :3].detach().contiguous()
+            self.faiss_index.add(normals)
         
         return all_normals

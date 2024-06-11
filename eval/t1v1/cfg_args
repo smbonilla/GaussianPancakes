@@ -1,1 +1,0 @@
-Namespace(data_device='cuda', depths='depths', eval=True, images='images', model_path='./eval/t1v1', resolution=4, sh_degree=3, source_path='/home/sierra/data/01-phantom/t1v1', white_background=False)

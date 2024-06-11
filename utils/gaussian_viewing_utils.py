@@ -79,7 +79,7 @@ def load_camera(model_path, idx=0):
     fovx = focal2fov(raw_camera['fx'], width)
     fovy = focal2fov(raw_camera['fy'], height)
 
-    return GSCamera(colmap_id=idx, R=R, T=T, FoVx=fovx, FoVy=fovy, image=torch.zeros((3, height, width)), gt_alpha_mask=None, image_name ='fake', uid=0)
+    return GSCamera(colmap_id=idx, R=R, T=T, FoVx=fovx, FoVy=fovy, image=torch.zeros((3, height, width)), depth=torch.zeros((3, height, width)), gt_alpha_mask=None, image_name ='fake', uid=0)
 
 def new_camera(previous_camera, R, T):
     """
@@ -102,7 +102,7 @@ def new_camera(previous_camera, R, T):
     fovx = previous_camera.FoVx
     fovy = previous_camera.FoVy
 
-    return GSCamera(colmap_id=previous_camera.colmap_id, R=R, T=T, FoVx=fovx, FoVy=fovy, image=torch.zeros((3, height, width)), gt_alpha_mask=None, image_name ='fake', uid=0)
+    return GSCamera(colmap_id=previous_camera.colmap_id, R=R, T=T, FoVx=fovx, FoVy=fovy, image=torch.zeros((3, height, width)), depth=torch.zeros((3, height, width)), gt_alpha_mask=None, image_name ='fake', uid=0)
 
 def calculate_tilt_rotation(tilt_angle):
     """
@@ -492,7 +492,7 @@ def rotate_about_x_path(model_path, center_camera_idx, degree, num_steps=120, nu
             fovy = center_camera.FoVy
             height = center_camera.image_height
             width = center_camera.image_width
-            new_camera = GSCamera(colmap_id=center_camera.colmap_id, R=R, T=T_center, FoVx=fovx, FoVy=fovy, image=torch.zeros((3, height, width)), gt_alpha_mask=None, image_name ='fake', uid=0)
+            new_camera = GSCamera(colmap_id=center_camera.colmap_id, R=R, T=T_center, FoVx=fovx, FoVy=fovy, image=torch.zeros((3, height, width)), depth=torch.zeros((3, height, width)),gt_alpha_mask=None, image_name ='fake', uid=0)
             cameras.append(new_camera)
     return cameras
 
@@ -522,17 +522,42 @@ def render_rotate_about_x_path_video(model_path, center_camera_idx, degree, fps,
 
     # Render
     images = []
+    depth_images = []
     for camera in cameras:
         render_res = render(camera, gaussians, pipeline, background)
         rendering = render_res["render"]
+        depth = render_res["depth"]
         image = (rendering.permute(1, 2, 0) * 255).to(torch.uint8).detach().cpu().numpy()
+        # depth is only 1 channel, so we need to repeat it 3 times to match the image
+        depth_image = (depth.squeeze() * 255).to(torch.uint8).detach().cpu().numpy()
         images.append(image)
+        depth_images.append(np.repeat(depth_image[:, :, np.newaxis], 3, axis=2))
 
+
+    # find global min and max of depth images to normalize
+    global_min = 100000
+    global_max = -100000
+    for img in depth_images:
+        img_min = np.min(img)
+        img_max = np.max(img)
+        if img_min < global_min:
+            global_min = img_min
+        if img_max > global_max:
+            global_max = img_max
+    # all depths should be mapped from global_min global_max to 0 255
+    for idx, depth_image in enumerate(depth_images):
+        depth_images[idx] = (depth_image - global_min) / (global_max - global_min) * 255
+        
     # Save video from frames in images
     try:
         clip = ImageSequenceClip(list(images), fps=fps)
         clip.write_videofile(output_path, codec='libx264', audio=False)
-        print(f'Video saved to {output_path}')
+        print(f'Image Video saved to {output_path}')
+
+        depth_path = output_path.split('.')[0] + '_depth.mp4'
+        clip = ImageSequenceClip(list(depth_images), fps=fps)
+        clip.write_videofile(depth_path, codec='libx264', audio=False)
+        print(f'Depth Video saved to {depth_path}')
 
     except Exception as e:
         print('There seems to be an issue with loading the images.')
