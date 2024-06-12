@@ -53,7 +53,6 @@ def training(dataset, opt, pipe, args):
     # Initialize training parameters and setup
     # -----------------------------------------------------------
 
-    # initialize argument parameters
     params = {
         'test_iterations': args.test_iterations,
         'save_iterations': args.save_iterations,
@@ -64,7 +63,6 @@ def training(dataset, opt, pipe, args):
         'save_img_from_itr': args.save_img_from_itr
     }
 
-    # initialize training parameters
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
