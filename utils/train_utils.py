@@ -7,6 +7,8 @@ from pytorch_msssim import ms_ssim
 from .loss_utils import ssim
 import lpips
 from scene import Scene
+import numpy as np
+from PIL import Image
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -37,7 +39,7 @@ def prepare_output_and_logger(args):
         print("Tensorboard not available: not logging progress")
     return tb_writer
 
-def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs):
+def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs, verbose):
     if tb_writer:
         tb_writer.add_scalar('train_loss_patches/l1_loss', Ll1.item(), iteration)
         tb_writer.add_scalar('train_loss_patches/total_loss', loss.item(), iteration)
@@ -93,3 +95,21 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
             # tb_writer.add_histogram("scene/opacity_histogram", scene.gaussians.get_opacity, iteration)
             tb_writer.add_scalar('total_points', scene.gaussians.get_xyz.shape[0], iteration)
         torch.cuda.empty_cache()
+
+def save_image(tensor, filename, source_path):
+    # Ensure tensor is in CPU memory and convert to numpy.
+    array = tensor.detach().cpu().numpy()
+    # Handle single-channel (depth) images correctly by squeezing the channel dimension.
+    if array.shape[0] == 1:  # Assuming channel-first format.
+        array = np.squeeze(array, axis=0)
+    else:
+        array = array.transpose(1, 2, 0)  # Convert from CHW to HWC for RGB images.
+    array = (array * 255).astype(np.uint8)
+    Image.fromarray(array).save(os.path.join(source_path, filename))
+
+def save_example_images(image, gt_image, depth, gt_depth, iteration, source_path):
+    # Save images.
+    save_image(image, "render_" + str(iteration) + ".png", source_path)
+    save_image(gt_image, "gt_" + str(iteration) + ".png", source_path)
+    save_image(depth, "depth_" + str(iteration) + ".png", source_path)
+    save_image(gt_depth, "gt_depth_" + str(iteration) + ".png", source_path)

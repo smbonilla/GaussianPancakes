@@ -33,12 +33,12 @@ from scene import Scene, GaussianModel
 from utils.general_utils import safe_state
 from utils.image_utils import psnr
 from arguments import ModelParams, PipelineParams, OptimizationParams
-from utils.train_utils import prepare_output_and_logger, training_report
+from utils.train_utils import prepare_output_and_logger, training_report, save_example_images
 
 # Suppress specific warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
+def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, verbose):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
@@ -117,23 +117,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         # if iteration == 1 or 3000 save the images (depth and render)
         if iteration == 1 or iteration == 2:
-            # Convert and save images.
-            def save_image(tensor, filename):
-                # Ensure tensor is in CPU memory and convert to numpy.
-                array = tensor.detach().cpu().numpy()
-                # Handle single-channel (depth) images correctly by squeezing the channel dimension.
-                if array.shape[0] == 1:  # Assuming channel-first format.
-                    array = np.squeeze(array, axis=0)
-                else:
-                    array = array.transpose(1, 2, 0)  # Convert from CHW to HWC for RGB images.
-                array = (array * 255).astype(np.uint8)
-                Image.fromarray(array).save(os.path.join(dataset.source_path, filename))
-            
-            # Save images.
-            save_image(image, "render_" + str(iteration) + ".png")
-            save_image(gt_image, "gt_" + str(iteration) + ".png")
-            save_image(depth, "depth_" + str(iteration) + ".png")
-            save_image(gt_depth, "gt_depth_" + str(iteration) + ".png")
+            save_example_images(image, gt_image, depth, gt_depth, iteration, dataset.source_path)
 
         if opt.lambda_dssim != 0:
             L_dssim = 1.0 - ssim(image, gt_image)
@@ -159,7 +143,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 progress_bar.close()
 
             # Log and save
-            training_report(tb_writer, iteration, L1_images, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
+            training_report(tb_writer, iteration, L1_images, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), verbose)
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
@@ -201,6 +185,7 @@ if __name__ == "__main__":
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
+    parser.add_argument("--verbose", action="store_true", default=False)
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
     
@@ -212,7 +197,7 @@ if __name__ == "__main__":
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
+    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from, args.verbose)
 
     # All done
     print("\nTraining complete.")
