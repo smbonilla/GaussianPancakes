@@ -49,14 +49,20 @@ def training(dataset, opt, pipe, args):
         args (Namespace): Command-line arguments containing various training options.
     """
 
+    # -----------------------------------------------------------
+    # Initialize training parameters and setup
+    # -----------------------------------------------------------
+
     # initialize argument parameters
-    testing_iterations = args.test_iterations
-    saving_iterations = args.save_iterations
-    checkpoint_iterations = args.checkpoint_iterations
-    checkpoint = args.start_checkpoint
-    debug_from = args.debug_from
-    verbose = args.verbose
-    save_img_from_itr = args.save_img_from_itr
+    params = {
+        'test_iterations': args.test_iterations,
+        'save_iterations': args.save_iterations,
+        'checkpoint_iterations': args.checkpoint_iterations,
+        'checkpoint': args.start_checkpoint,
+        'debug_from': args.debug_from,
+        'verbose': args.verbose,
+        'save_img_from_itr': args.save_img_from_itr
+    }
 
     # initialize training parameters
     first_iter = 0
@@ -66,15 +72,15 @@ def training(dataset, opt, pipe, args):
     gaussians.training_setup(opt)
 
     # load checkpoint if specified
-    if checkpoint:
-        (model_params, first_iter) = torch.load(checkpoint)
+    if params['checkpoint']:
+        (model_params, first_iter) = torch.load(params['checkpoint'])
         gaussians.restore(model_params, opt)
 
     # set background color
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-    print("\nTesting iterations: ", testing_iterations)
+    print("\nTesting iterations: ", params['test_iterations'])
     
     # initialize normals for geometric loss if weight is not 0
     if opt.lambda_norm != 0:
@@ -88,7 +94,10 @@ def training(dataset, opt, pipe, args):
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
 
-    # training loop
+    # -----------------------------------------------------------
+    # Training loop
+    # -----------------------------------------------------------
+
     for iteration in range(first_iter, opt.iterations + 1):        
         if network_gui.conn == None:
             network_gui.try_connect()
@@ -119,8 +128,11 @@ def training(dataset, opt, pipe, args):
         randinteger = randint(0, len(viewpoint_stack)-1)
         viewpoint_cam = viewpoint_stack.pop(randinteger)
 
-        # Render
-        if (iteration - 1) == debug_from:
+        # -----------------------------------------------------------
+        # Rendering
+        # -----------------------------------------------------------
+
+        if (iteration - 1) == params['debug_from']:
             pipe.debug = True
 
         render_pkg = render(viewpoint_cam, gaussians, pipe, background)
@@ -130,7 +142,10 @@ def training(dataset, opt, pipe, args):
         gt_image = viewpoint_cam.original_image.cuda() 
         gt_depth = viewpoint_cam.original_depth.cuda()
 
-        # Loss
+        # -----------------------------------------------------------
+        # Loss computation
+        # -----------------------------------------------------------
+
         L1_images = l1_loss(image, gt_image)
         L_depths = F.huber_loss(depth, gt_depth, delta=0.2) 
         loss = (1.0 - opt.lambda_dssim) * L1_images + opt.lambda_depth * L_depths 
@@ -150,9 +165,9 @@ def training(dataset, opt, pipe, args):
 
         iter_end.record()
 
-        # save images for debugging if argument is passed
-        if save_img_from_itr and iteration in save_img_from_itr:
-            save_example_images(image, gt_image, depth, gt_depth, iteration, dataset.source_path)
+        # -----------------------------------------------------------
+        # Training report
+        # -----------------------------------------------------------
 
         with torch.no_grad():
 
@@ -165,6 +180,10 @@ def training(dataset, opt, pipe, args):
             if iteration == opt.iterations:
                 progress_bar.close()
 
+            # Save images
+            if params['save_img_from_itr'] and iteration in params['save_img_from_itr']:
+                save_example_images(image, gt_image, depth, gt_depth, iteration, dataset.source_path)
+
             # Log and save
             report_params = {
                 'tb_writer': tb_writer,
@@ -173,19 +192,22 @@ def training(dataset, opt, pipe, args):
                 'loss': loss,
                 'l1_loss': l1_loss,
                 'elapsed': iter_start.elapsed_time(iter_end),
-                'testing_iterations': testing_iterations,
+                'testing_iterations': params['test_iterations'],
                 'scene': scene,
                 'renderFunc': render,
                 'renderArgs': (pipe, background),
-                'verbose': verbose
+                'verbose': params['verbose']
             }
             training_report(**report_params)
 
-            if (iteration in saving_iterations):
+            if (iteration in params['test_iterations']):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
 
-            # Densification
+            # -----------------------------------------------------------
+            # Adding Gaussian points 
+            # -----------------------------------------------------------
+
             if iteration < opt.densify_until_iter:
                 # Keep track of max radii in image-space for pruning
                 gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
@@ -198,12 +220,15 @@ def training(dataset, opt, pipe, args):
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
 
-            # Optimizer step
+            # -----------------------------------------------------------
+            # Optimization step
+            # -----------------------------------------------------------
+
             if iteration < opt.iterations:
                 gaussians.optimizer.step()
                 gaussians.optimizer.zero_grad(set_to_none = True)
 
-            if (iteration in checkpoint_iterations):
+            if (iteration in params['checkpoint_iterations']):
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
 
