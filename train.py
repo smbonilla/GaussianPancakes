@@ -15,18 +15,17 @@ from PIL import Image
 
 import os
 import torch
-from torch.utils.data import DataLoader
 import torch.nn.functional as F
 import lpips
 from random import randint
-from utils.loss_utils import l1_loss, ssim, l2_loss
+from utils.loss_utils import l1_loss, ssim, compute_geometric_loss
 from gaussian_renderer import render, network_gui
 import sys
 import warnings
 import time
 from pytorch_msssim import ms_ssim
 from scene import Scene, GaussianModel
-from utils.general_utils import safe_state, cdist
+from utils.general_utils import safe_state
 import uuid
 from tqdm import tqdm
 from utils.image_utils import psnr
@@ -40,22 +39,6 @@ except ImportError:
     TENSORBOARD_FOUND = False
 
 warnings.filterwarnings("ignore", category=UserWarning)
-
-def compute_geometric_loss(gaussian_normals, original_normals, closest_point_indices):
-    """    
-    Compute the geometric loss between gaussian normals and original normals.
-
-    :param 
-        gaussian_normals: Tensor of shape (N, 6) representing gaussian normals.
-        original_normals: Tensor of shape (M, 6) representing original normals.
-        closest_point_indices: Tensor of shape (N, 1) representing the indices of the closest points in the original point cloud.
-
-    :return: The computed L1 loss.
-    """
-    closest_original_normals = original_normals[closest_point_indices, 3:]
-    cosine_sim = (gaussian_normals[:, 3:] * closest_original_normals).sum(dim=1)
-    loss = 1 - cosine_sim.abs()
-    return loss.mean()
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
     first_iter = 0
@@ -272,8 +255,6 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                 ssim_test_std = torch.std(torch.tensor(ssim_test))
                 mssim_test_std = torch.std(torch.tensor(mssim_test))
 
-                #print("\n[ITER {}] Evaluating {} avg: L1 {} PSNR {} LPIPS {} SSIM {}".format(iteration, config['name'], l1_test_avg, psnr_test_avg, lpips_test_avg, ssim_test_avg))
-                #print("[ITER {}] Evaluating {} std: L1 {} PSNR {} LPIPS {} SSIM {}".format(iteration, config['name'], l1_test_std, psnr_test_std, lpips_test_std, ssim_test_std))
                 print("\n[ITER {}] Evaluating {} avg: L1 {} PSNR {} LPIPS {} SSIM {} MSSIM {}".format(iteration, config['name'], l1_test_avg, psnr_test_avg, lpips_test_avg, ssim_test_avg, mssim_test_avg))
                 print("[ITER {}] Evaluating {} std: L1 {} PSNR {} LPIPS {} SSIM {} MSSIM {}".format(iteration, config['name'], l1_test_std, psnr_test_std, lpips_test_std, ssim_test_std, mssim_test_std))
 
