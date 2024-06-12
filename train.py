@@ -51,8 +51,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-    lpips_model = lpips.LPIPS(net='vgg').cuda()
-
     # print test iterations
     print("\nTesting iterations: ", testing_iterations)
  
@@ -143,7 +141,21 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 progress_bar.close()
 
             # Log and save
-            training_report(tb_writer, iteration, L1_images, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), verbose)
+            report_params = {
+                'tb_writer': tb_writer,
+                'iteration': iteration,
+                'Ll1': L1_images,
+                'loss': loss,
+                'l1_loss': l1_loss,
+                'elapsed': iter_start.elapsed_time(iter_end),
+                'testing_iterations': testing_iterations,
+                'scene': scene,
+                'renderFunc': render,
+                'renderArgs': (pipe, background),
+                'verbose': verbose
+            }
+            training_report(**report_params)
+
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
@@ -197,7 +209,20 @@ if __name__ == "__main__":
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from, args.verbose)
 
+    # training parameters
+    train_params = {
+        'dataset': lp.extract(args),
+        'opt': op.extract(args),
+        'pipe': pp.extract(args),
+        'testing_iterations': args.test_iterations, 
+        'saving_iterations': args.save_iterations,
+        'checkpoint_iterations': args.checkpoint_iterations,
+        'checkpoint': args.start_checkpoint,
+        'debug_from': args.debug_from,
+        'verbose': args.verbose
+    }
+    training(**train_params)
+    
     # All done
     print("\nTraining complete.")
