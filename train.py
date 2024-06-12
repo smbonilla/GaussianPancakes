@@ -38,22 +38,45 @@ from utils.train_utils import prepare_output_and_logger, training_report, save_e
 # Suppress specific warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, verbose):
+def training(dataset, opt, pipe, args):
+    """
+    Executes the training loop for the specified dataset and model parameters.
+
+    Parameters:
+        dataset (object): The dataset to be used for training.
+        opt (object): Optimization parameters.
+        pipe (object): Pipeline parameters.
+        args (Namespace): Command-line arguments containing various training options.
+    """
+
+    # initialize argument parameters
+    testing_iterations = args.test_iterations
+    saving_iterations = args.save_iterations
+    checkpoint_iterations = args.checkpoint_iterations
+    checkpoint = args.start_checkpoint
+    debug_from = args.debug_from
+    verbose = args.verbose
+    save_img_from_itr = args.save_img_from_itr
+
+    # initialize training parameters
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians)
     gaussians.training_setup(opt)
+
+    # load checkpoint if specified
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
         gaussians.restore(model_params, opt)
 
+    # set background color
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-    # print test iterations
     print("\nTesting iterations: ", testing_iterations)
- 
+    
+    # initialize normals for geometric loss if weight is not 0
     if opt.lambda_norm != 0:
         original_normals = gaussians.get_original_normals.detach()
 
@@ -65,6 +88,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
 
+    # training loop
     for iteration in range(first_iter, opt.iterations + 1):        
         if network_gui.conn == None:
             network_gui.try_connect()
@@ -106,21 +130,17 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gt_image = viewpoint_cam.original_image.cuda() 
         gt_depth = viewpoint_cam.original_depth.cuda()
 
+        # Loss
         L1_images = l1_loss(image, gt_image)
-
         L_depths = F.huber_loss(depth, gt_depth, delta=0.2) 
-
         loss = (1.0 - opt.lambda_dssim) * L1_images + opt.lambda_depth * L_depths 
         psnr_ = psnr(image, gt_image).mean().double()
-
-        # if iteration == 1 or 3000 save the images (depth and render)
-        if iteration == 1 or iteration == 2:
-            save_example_images(image, gt_image, depth, gt_depth, iteration, dataset.source_path)
 
         if opt.lambda_dssim != 0:
             L_dssim = 1.0 - ssim(image, gt_image)
             loss += opt.lambda_dssim * L_dssim
-        if opt.lambda_norm != 0 and iteration > 1000 and iteration % 2 == 0:
+
+        if opt.lambda_norm != 0 and iteration > opt.lambda_norm_start and iteration % opt.lambda_norm_skip == 0:
             gaussian_normals = gaussians.get_gaussian_normals()
             closest_point_indices = gaussians.get_closest_point_indices
             L_normals = compute_geometric_loss(gaussian_normals, original_normals, closest_point_indices)
@@ -130,7 +150,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         iter_end.record()
 
+        # save images for debugging if argument is passed
+        if save_img_from_itr and iteration in save_img_from_itr:
+            save_example_images(image, gt_image, depth, gt_depth, iteration, dataset.source_path)
+
         with torch.no_grad():
+
             # Progress bar
             ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
             total_points = gaussians.get_xyz.shape[0]
@@ -183,7 +208,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
 
 if __name__ == "__main__":
-    # Set up command line argument parser
+
+    # set up command line argument parser
     parser = ArgumentParser(description="Training script parameters")
     lp = ModelParams(parser)
     op = OptimizationParams(parser)
@@ -198,31 +224,26 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
     parser.add_argument("--verbose", action="store_true", default=False)
+    parser.add_argument("--save_img_from_itr", nargs="+", type=int, default=None) 
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
-    
     print("Optimizing " + args.model_path)
 
-    # Initialize system state (RNG)
+    # initialize system state (RNG)
     safe_state(args.quiet)
 
-    # Start GUI server, configure and run training
+    # start network gui
     network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
 
-    # training parameters
+    # train
     train_params = {
         'dataset': lp.extract(args),
         'opt': op.extract(args),
         'pipe': pp.extract(args),
-        'testing_iterations': args.test_iterations, 
-        'saving_iterations': args.save_iterations,
-        'checkpoint_iterations': args.checkpoint_iterations,
-        'checkpoint': args.start_checkpoint,
-        'debug_from': args.debug_from,
-        'verbose': args.verbose
+        'args': args
     }
     training(**train_params)
-    
-    # All done
+
+    # finished
     print("\nTraining complete.")

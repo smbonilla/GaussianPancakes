@@ -85,6 +85,8 @@ class OptimizationParams(ParamGroup):
 
         self.lambda_dssim = 0.2
         self.lambda_norm = 0.2
+        self.lambda_norm_start = 1000
+        self.lambda_norm_skip = 2
         self.lambda_depth = 0.6
         
         self.densification_interval = 100
