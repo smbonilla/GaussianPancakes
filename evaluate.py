@@ -13,19 +13,20 @@ import os
 from argparse import ArgumentParser
 from time import time
 
-# phantom = ["c3v4", "d4v2", "t1v1"]
-phantom = []
-# simulation = ["cecum", "rectum", "sigmoid"]
-simulation = []
+phantom = ["c3v4", "d4v2", "t1v1"]
+# phantom = []
 
-in_vivo = []
-#in_vivo = ["invivo56", "invivo57", "invivo31"]
+simulation = ["cecum", "rectum", "sigmoid"]
+# simulation = []
+
 in_vivo = ["invivo56", "invivo31", "invivo57"] 
+# in_vivo = []
 
-in_vivo_2 = ["039", "055", "063", "035", "067"]
+in_vivo_2 = ["020", "027", "051", "064", "039", "055", "063", "035", "067"]
 #in_vivo_2 = []
 
 parser = ArgumentParser(description="Full evaluation script parameters")
+parser.add_argument("--data_path", required=True)
 parser.add_argument("--skip_training", action="store_true")
 parser.add_argument("--skip_rendering", action="store_true")
 parser.add_argument("--skip_metrics", action="store_true")
@@ -45,11 +46,11 @@ if in_vivo_2:
 all_times = []
 
 if not args.skip_training:
-    common_args = " --quiet --eval --test_iterations -1 "
+    common_args = " --quiet --eval --test_iterations -1 --save_iterations 7000"
     if phantom:
         for scene in phantom:
             start = time()
-            source = "/home/sierra/data/01-phantom/" + scene
+            source = args.data_path + "/01-phantom/" + scene
             os.system("python train.py -s " + source + " --iterations 7000 --res 4 -m " + args.output_path + "/" + scene + common_args)
             end = time()
             print("Training time for " + scene + ": " + str(end - start) + " seconds")
@@ -57,23 +58,15 @@ if not args.skip_training:
     if simulation:
         for scene in simulation:
             start = time()
-            source = "/home/sierra/REIM-NeRF/data/GP-not-processed/" + scene
+            source = args.data_path + "/02-simulation/" + scene
             os.system("python train.py -s " + source + " --iterations 7000 -m " + args.output_path + "/" + scene + common_args)
             end = time()
             print("Training time for " + scene + ": " + str(end - start) + " seconds")
             all_times.append(end - start)
-    if in_vivo:
-        for scene in in_vivo:
+    if in_vivo or in_vivo_2:
+        for scene in in_vivo + in_vivo_2:
             start = time()
-            source = "/home/sierra/data/00-in-vivo/" + scene
-            os.system("python train.py -s " + source + " --iterations 7000 -m " + args.output_path + "/" + scene + common_args)
-            end = time()
-            print("Training time for " + scene + ": " + str(end - start) + " seconds")
-            all_times.append(end - start)
-    if in_vivo_2:
-        for scene in in_vivo_2:
-            start = time()
-            source = "/home/sierra/REIM-NeRF/data3/GP-not-processed/" + scene
+            source = args.data_path + "/00-in-vivo/" + scene
             os.system("python train.py -s " + source + " --iterations 7000 -m " + args.output_path + "/" + scene + common_args)
             end = time()
             print("Training time for " + scene + ": " + str(end - start) + " seconds")
@@ -83,16 +76,13 @@ if not args.skip_rendering:
     all_sources = []
     if phantom:
         for scene in phantom:
-            all_sources.append("/home/sierra/data/01-phantom/" + scene)
+            all_sources.append(args.data_path + "/01-phantom/" + scene)
     if simulation:
         for scene in simulation:
-            all_sources.append("/home/sierra/REIM-NeRF/data/GP-not-processed/" + scene)
-    if in_vivo:
-        for scene in in_vivo:
-            all_sources.append("/home/sierra/data/00-in-vivo/" + scene)
-    if in_vivo_2:
-        for scene in in_vivo_2:
-            all_sources.append("/home/sierra/REIM-NeRF/data3/GP-not-processed/" + scene)
+            all_sources.append(args.data_path + "/02-simulation/" + scene)
+    if in_vivo or in_vivo_2:
+        for scene in in_vivo + in_vivo_2:  
+            all_sources.append(args.data_path + "/00-in-vivo/" + scene)
 
     common_args = " --quiet --eval"
     for scene, source in zip(all_scenes, all_sources):

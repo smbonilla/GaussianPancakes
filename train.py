@@ -201,6 +201,10 @@ def training(dataset, opt, pipe, args):
             if (iteration in params['test_iterations']):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
+            
+            if (iteration in params['save_iterations']):
+                print("\n[ITER {}] Saving Checkpoint".format(iteration))
+                scene.save(iteration)
 
             # -----------------------------------------------------------
             # Adding Gaussian points 
