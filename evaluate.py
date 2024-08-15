@@ -45,7 +45,6 @@ if in_vivo_2:
 all_times = []
 
 if not args.skip_training:
-    #common_args = " --quiet --eval --test_iterations -1 "
     common_args = " --quiet --eval --test_iterations -1 "
     if phantom:
         for scene in phantom:
