@@ -43,14 +43,8 @@ class Scene:
 
         if os.path.exists(os.path.join(args.source_path, "cameras.txt")):
             if glob.glob(os.path.join(args.source_path, "*_poses.txt")):
-                print("RNNSIM dataset detected!")
-                scene_info = sceneLoadTypeCallbacks["RNNSIM"](args.source_path, args.images, args.depths, args.eval)
-            elif glob.glob(os.path.join(args.source_path, "*.ply")):
-                print("RNNC3VD dataset detected!")
-                scene_info = sceneLoadTypeCallbacks["RNNC3VD"](args.source_path, args.images, args.depths, args.eval)
-            elif os.path.exists(os.path.join(args.source_path, "RNN-DP.txt")):
-                print("RNNVIVO dataset detected!")
-                scene_info = sceneLoadTypeCallbacks["RNNVIVO"](args.source_path, args.images, args.depths, args.eval)
+                print("RNN dataset detected!")
+                scene_info = sceneLoadTypeCallbacks["RNN"](args.source_path, args.images, args.depths, args.eval)
             else:
                 assert False, "Could not recognize scene type!"
         elif os.path.exists(os.path.join(args.source_path, "sparse")):

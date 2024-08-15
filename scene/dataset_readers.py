@@ -23,7 +23,7 @@ from pathlib import Path
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
-from scene.rnnslam_loader import readRNNSIM
+from scene.rnnslam_loader import readRNN
 from utils.obj_utils import read_obj 
 
 class CameraInfo(NamedTuple):
@@ -278,7 +278,7 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
                            ply_path=ply_path)
     return scene_info
 
-def readRNNSIMSceneInfo(path, images, depths, eval, llffhold=8):
+def readRNNSceneInfo(path, images, depths, eval, llffhold=8):
 
     extrinsics_file = [f for f in os.listdir(path) if f.endswith("_poses.txt")][0]
     extr_file_path = os.path.join(path, extrinsics_file)
@@ -288,7 +288,7 @@ def readRNNSIMSceneInfo(path, images, depths, eval, llffhold=8):
     reading_dir = "images" if images == None else images
     depths_dir = "depths" if depths == None else depths
 
-    cam_infos_unsorted = readRNNSIM(extrinsics_file=extr_file_path, intrinsics_file=intr_file_path, 
+    cam_infos_unsorted = readRNN(extrinsics_file=extr_file_path, intrinsics_file=intr_file_path, 
                                     images_folder=os.path.join(path, reading_dir), depths_folder=os.path.join(path, depths_dir))
     cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.uid)
 
@@ -331,5 +331,5 @@ def readRNNSIMSceneInfo(path, images, depths, eval, llffhold=8):
 sceneLoadTypeCallbacks = {
     "Colmap": readColmapSceneInfo,
     "Blender" : readNerfSyntheticInfo, 
-    "RNNSIM" : readRNNSIMSceneInfo,
+    "RNN" : readRNNSceneInfo,
 }

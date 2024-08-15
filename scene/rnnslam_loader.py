@@ -152,7 +152,7 @@ def read_rnnslam_intrinsics(intrinsics_file):
     """
     return read_intrinsics_text(intrinsics_file)
 
-def readRNNSIM(extrinsics_file, intrinsics_file, images_folder, depths_folder):
+def readRNN(extrinsics_file, intrinsics_file, images_folder, depths_folder):
     # all image files that are png or jpg in images_folder
     image_files = [f for f in os.listdir(images_folder) if f.endswith('.png') or f.endswith('.jpg')]
     depth_files = [f for f in os.listdir(depths_folder) if f.endswith('.png') or f.endswith('.jpg')]
@@ -231,29 +231,3 @@ def readRNNSIM(extrinsics_file, intrinsics_file, images_folder, depths_folder):
         cam_infos.append(cam_info)
     sys.stdout.write('\n')
     return cam_infos
-
-
-# class RNNSLAM_Dataset(object): # may need to be changed to rnnslam for simulation, in-vivo, and phantom separately b/c camera intrinsics are different
-#     def __init__(self, source_path, images, depths):
-#         self.source_path = source_path
-#         self.images = images
-#         self.depths = depths
-
-#         self.load_meta()
-    
-#     def load_meta(self):
-#         "Load data from dataset."
-#         try:
-#             # Read TUM poses & hard set camera intrinsics 
-#             cameras_extrinsic_file = os.path.join(self.source_path, "sparse/0", "images.bin")
-#             cameras_intrinsic_file = os.path.join(self.source_path, "sparse/0", "cameras.bin")
-#             cam_extrinsics = read_extrinsics_binary(cameras_extrinsic_file)
-#             cam_intrinsics = read_intrinsics_binary(cameras_intrinsic_file)
-#         except:
-#             cameras_extrinsic_file = os.path.join(self.source_path, "sparse/0", "images.txt")
-#             cameras_intrinsic_file = os.path.join(self.source_path, "sparse/0", "cameras.txt")
-#             cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
-#             cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
-
-#         reading_dir = "images" if self.images == None else self.images
-#         depths_dir = "depths" if self.depths == None else self.depths
