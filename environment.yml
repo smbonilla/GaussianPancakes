@@ -1,4 +1,4 @@
-name: gaussian_splatting38
+name: test
 channels:
   - pytorch
   - conda-forge
@@ -11,7 +11,13 @@ dependencies:
   - pytorch=1.12.1
   - torchaudio=0.12.1
   - torchvision=0.13.1
-  - tqdm
   - pip:
-    - submodules/diff-gaussian-rasterization
+    - submodules/depth-diff-gaussian-rasterization
     - submodules/simple-knn
+    - submodules/gaussian-norms
+    - pytorch-msssim
+    - Pillow  
+    - tqdm
+    - tensorboard
+    - faiss-gpu
+    - lpips
