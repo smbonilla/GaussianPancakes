@@ -13,8 +13,10 @@
 This software implements the regularized splatting process presented in our paper [Gaussian Pancakes](https://arxiv.org/abs/2404.06128) to be presented at MICCAI'24. 
 
 ### Notes
-* 
-* depth-diff-gaussian-rasterization [](https://github.com/ingra14m/depth-diff-gaussian-rasterization/tree/depth) use depth branch for depth gradients
+* if using this code base, please cite the [Gaussian Pancakes](https://arxiv.org/abs/2404.06128) paper 🙌
+* rasterization engine for 3D Gaussian Splatting depth-diff-gaussian-rasterization [](https://github.com/ingra14m/depth-diff-gaussian-rasterization/tree/depth) use depth branch for depth gradients
+* this repo has the gaussian-norms cuda library for computing gaussian normals efficiently 
+
 ### Pipeline
 <!-- ![pipeline](images/Method_lightmode.png#gh-light-mode-only)
 ![pipeline](images/Method_darkmode.png#gh-dark-mode-only) -->
@@ -27,3 +29,5 @@ This software implements the regularized splatting process presented in our pape
 
 ### Update
 * 21/03/2024 - Code: coming soon
+* 16/08/2024 - Code: initial code release
+* 16/08/2024 - Code: will release gaussian norms as its own repo at some point 
