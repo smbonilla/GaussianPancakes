@@ -1,23 +1,26 @@
-name: test
+name: gs_gnorms_2
 channels:
   - pytorch
   - conda-forge
   - defaults
 dependencies:
-  - cudatoolkit=11.3
-  - plyfile
-  - python=3.8
-  - pip=23.2.1
-  - pytorch=1.12.1
-  - torchaudio=0.12.1
-  - torchvision=0.13.1
+  - cudatoolkit=11.3.1=hb98b00a_13
+  - faiss=1.7.4=py38cuda112h48d0473_0_cuda
+  - ffmpeg=4.3=hf484d3e_0
+  - numpy=1.24.3=py38h14f4228_0
+  - pickleshare=0.7.5=py_1003
+  - pillow=9.4.0=py38hde6dc18_1
+  - python=3.8.18=hd12c33a_1_cpython
+  - pytorch=1.12.1=py3.8_cuda11.3_cudnn8.3.2_0
+  - torchaudio=0.12.1=py38_cu113
+  - torchvision=0.13.1=py38_cu113
+  - tqdm=4.66.2=pyhd8ed1ab_0
   - pip:
     - submodules/depth-diff-gaussian-rasterization
     - submodules/simple-knn
     - submodules/gaussian-norms
-    - pytorch-msssim
-    - Pillow  
-    - tqdm
-    - tensorboard
-    - faiss-gpu
+    - pytorch-msssim==1.0.0
+    - tensorboard==2.14.0
+    - tensorboard-data-server==0.7.2
     - lpips
+    - plyfile
