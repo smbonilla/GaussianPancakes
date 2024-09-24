@@ -27,6 +27,8 @@ For the efficient differential Gaussian normal calculation submodule: https://gi
   <img alt="pipeline." src="images/Method_lightmode.png">
 </picture>
 
+### Cloning
+
 To get started, clone the repository:
 
 ```bash
@@ -92,17 +94,44 @@ Refer to the Gaussian Splatting Repo for command line arguments detailed, we onl
 
 All experiments with arguments and evaluation were run using `evaluate.py`.
 
-### Notes
-* if using this code base, please cite the [Gaussian Pancakes](https://arxiv.org/abs/2404.06128) paper 🙌
-* rasterization engine for 3D Gaussian Splatting depth-diff-gaussian-rasterization [](https://github.com/ingra14m/depth-diff-gaussian-rasterization/tree/depth) use depth branch for depth gradients
-* this repo has the gaussian-norms cuda library for computing gaussian normals efficiently 
+## Acknowledgments
+
+* Please cite the original [3D Gaussian Splatting paper](https://arxiv.org/abs/2308.04079) by Kerbl et al. 
+```bibtex
+@Article{kerbl3Dgaussians,
+      author       = {Kerbl, Bernhard and Kopanas, Georgios and Leimk{\"u}hler, Thomas and Drettakis, George},
+      title        = {3D Gaussian Splatting for Real-Time Radiance Field Rendering},
+      journal      = {ACM Transactions on Graphics},
+      number       = {4},
+      volume       = {42},
+      month        = {July},
+      year         = {2023},
+      url          = {https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/}
+}
+```
+* If you find this helpful in your research, please also consider citing the [Gaussian Pancakes](https://arxiv.org/abs/2404.06128) paper 🙌
+```bibtex
+@article{Bonilla2024ARXIV,
+  author    = {Sierra Bonilla and Shuai Zhang and Dimitrios Psychogyios and Danail Stoyanov and Francisco Vasconcelos and Sophia Bano},
+  title     = {Gaussian Pancakes: Geometrically-Regularized 3D Gaussian Splatting for Realistic Endoscopic Reconstruction},
+  journal   = {arXiv},
+  volume    = {2404.06128},
+  year      = {2024},
+}
+```
+* Thanks to authors of this repo as well: [depth-diff-gaussian-rasterization](https://github.com/ingra14m/depth-diff-gaussian-rasterization/tree/depth) (use the `depth` branch for depth gradients)
 
 
-### Update History
+
+
+## Update History
 * **21/03/2024** - Code: initial code: coming soon
 * **16/08/2024** - Code: initial code release
 * **16/08/2024** - Code: `gaussian-norms` submodule will be released as its own repo at a later date
 * **16/08/2024** - Code: `gaussian-norms` repo released: [https://github.com/smbonilla/gaussian-norms](https://github.com/smbonilla/gaussian-norms)
 * **24/09/2024** - Code: adaptations made to integrate with 3D Gaussian Splatting
-* **24/09/2024** - Code: testing environment setup on different GPU configurations
 * **08/10/2024** - Paper: paper presentation at MICCAI: Tuesday, October 8, 2024, 10:30AM - 11:30AM (Times in Morocco)
+
+## To-Do
+* **24/09/2024** - Code: testing environment setup on different GPU configurations
+* **24/09/2024** - Code: add example of dataset to repo & jupyter notebook example usage 
