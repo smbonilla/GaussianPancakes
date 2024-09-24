@@ -13,3 +13,4 @@ lpipsPyTorch
 lpipsPyTorch
 # submodules/simple-knn
 eval/
+**/*egg-info/
