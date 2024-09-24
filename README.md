@@ -122,8 +122,6 @@ All experiments with arguments and evaluation were run using `evaluate.py`.
 * Thanks to authors of this repo as well: [depth-diff-gaussian-rasterization](https://github.com/ingra14m/depth-diff-gaussian-rasterization/tree/depth) (use the `depth` branch for depth gradients)
 
 
-
-
 ## Update History
 * **21/03/2024** - Code: initial code: coming soon
 * **16/08/2024** - Code: initial code release
