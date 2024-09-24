@@ -1,1 +1,17 @@
-.DS_STORE
+*.pyc
+.vscode
+output
+build
+diff_rasterization/diff_rast.egg-info
+diff_rasterization/dist
+tensorboard_3d
+screenshots
+.DS_Store
+geometric_loss.txt
+*.txt
+lpipsPyTorch
+lpipsPyTorch
+# submodules/simple-knn
+eval/
+**/*egg-info/
+environment_old.yml
